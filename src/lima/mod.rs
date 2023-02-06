@@ -33,12 +33,16 @@ impl From<block_info::PublicKeyHash> for crate::core::PublicKeyHashV0 {
 }
 
 pub mod raw {
-    pub use rustgen::proto015_ptlimapt::*;
+    pub use rustgen::proto015_ptlimapt::{
+        baking_rights,
+        block_info,
+        constants,
+        level,
+    };
 
-    pub use block_info::{
+    pub(crate) use block_info::{
         ChainId,
         Operation,
-        TestChainStatus,
         Hash,
         RawBlockHeader,
         BlockHeaderMetadata,
