@@ -1,36 +1,33 @@
-use rustgen::proto015_ptlimapt::block_info;
+use rustgen::proto015_ptlimapt::{ block_info, baking_rights, constants };
 
-impl From<&'_ block_info::PublicKeyHash> for crate::core::PublicKeyHashV0 {
-    fn from(value: &'_ block_info::PublicKeyHash) -> Self {
-        match value {
-            block_info::PublicKeyHash::Ed25519(
-                block_info::publickeyhash::Ed25519 { ed25519_public_key_hash },
-            ) => Self::Ed25519(*ed25519_public_key_hash),
-            block_info::PublicKeyHash::Secp256k1(
-                block_info::publickeyhash::Secp256k1 { secp256k1_public_key_hash },
-            ) => Self::Secp256k1(*secp256k1_public_key_hash),
-            block_info::PublicKeyHash::P256(
-                block_info::publickeyhash::P256 { p256_public_key_hash },
-            ) => Self::P256(*p256_public_key_hash),
-        }
-    }
+macro_rules! from_pkh {
+    ($($id:ident),+ $(,)?) => {
+        $(
+            impl From<&'_ $id::PublicKeyHash> for $crate::core::PublicKeyHashV0 {
+                fn from(value: &'_ $id::PublicKeyHash) -> Self {
+                    use $id::{ PublicKeyHash, publickeyhash::{ Ed25519, Secp256k1, P256 } };
+                    match value {
+                        PublicKeyHash::Ed25519(Ed25519 { ed25519_public_key_hash }) => Self::Ed25519(*ed25519_public_key_hash),
+                        PublicKeyHash::Secp256k1(Secp256k1 { secp256k1_public_key_hash }) => Self::Secp256k1(*secp256k1_public_key_hash),
+                        PublicKeyHash::P256(P256 { p256_public_key_hash }) => Self::P256(*p256_public_key_hash),
+                    }
+                }
+            }
+            impl From<$id::PublicKeyHash> for $crate::core::PublicKeyHashV0 {
+                fn from(value: $id::PublicKeyHash) -> Self {
+                    use $id::{ PublicKeyHash, publickeyhash::{ Ed25519, Secp256k1, P256 } };
+                    match value {
+                        PublicKeyHash::Ed25519(Ed25519 { ed25519_public_key_hash }) => Self::Ed25519(ed25519_public_key_hash),
+                        PublicKeyHash::Secp256k1(Secp256k1 { secp256k1_public_key_hash }) => Self::Secp256k1(secp256k1_public_key_hash),
+                        PublicKeyHash::P256(P256 { p256_public_key_hash }) => Self::P256(p256_public_key_hash),
+                    }
+                }
+            }
+        )+
+    };
 }
 
-impl From<block_info::PublicKeyHash> for crate::core::PublicKeyHashV0 {
-    fn from(value: block_info::PublicKeyHash) -> Self {
-        match value {
-            block_info::PublicKeyHash::Ed25519(
-                block_info::publickeyhash::Ed25519 { ed25519_public_key_hash },
-            ) => Self::Ed25519(ed25519_public_key_hash),
-            block_info::PublicKeyHash::Secp256k1(
-                block_info::publickeyhash::Secp256k1 { secp256k1_public_key_hash },
-            ) => Self::Secp256k1(secp256k1_public_key_hash),
-            block_info::PublicKeyHash::P256(
-                block_info::publickeyhash::P256 { p256_public_key_hash },
-            ) => Self::P256(p256_public_key_hash),
-        }
-    }
-}
+from_pkh!(baking_rights, constants, block_info);
 
 pub mod raw {
     pub use rustgen::proto015_ptlimapt::level as level;
@@ -38,13 +35,7 @@ pub mod raw {
     pub use rustgen::proto015_ptlimapt::block_info as block_info;
     pub use rustgen::proto015_ptlimapt::baking_rights as baking_rights;
 
-    pub(crate) use block_info::{
-        ChainId,
-        Operation,
-        Hash,
-        RawBlockHeader,
-        BlockHeaderMetadata,
-    };
+    pub(crate) use block_info::{ ChainId, Operation, Hash, RawBlockHeader, BlockHeaderMetadata };
 
     pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
     pub type OperationResult =
