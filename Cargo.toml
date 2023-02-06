@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 runtime = { git = "https://gitlab.com/archaephyrryx/codec_generator" }
 gen = { git = "https://gitlab.com/archaephyrryx/codec_generator", features = ["full"] }
+sha2 = "0.10.6"
+base58 = "0.2.0"
