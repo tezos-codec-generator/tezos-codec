@@ -33,7 +33,8 @@ impl From<block_info::PublicKeyHash> for crate::core::PublicKeyHashV0 {
 }
 
 pub mod raw {
-    use rustgen::proto015_ptlimapt::block_info;
+    pub use rustgen::proto015_ptlimapt::*;
+
     pub use block_info::{
         ChainId,
         Operation,
@@ -51,16 +52,13 @@ pub mod raw {
 }
 
 pub mod api {
-    use std::num::TryFromIntError;
-
     use rust_runtime::Dynamic;
-    use rust_runtime::FixedBytes;
     use rust_runtime::Sequence;
     use rust_runtime::u30;
-    use rustgen::proto015_ptlimapt::block_info::OperationDenestDyn;
-    use rustgen::proto015_ptlimapt::block_info::Proto015PtLimaPtOperationAlphaOperationWithMetadata;
-    use rustgen::proto015_ptlimapt::block_info::operationdenestdyn;
-    use rustgen::proto015_ptlimapt::block_info::proto015ptlimaptoperationalphaoperationwithmetadata;
+    use super::raw::block_info::OperationDenestDyn;
+    use super::raw::block_info::Proto015PtLimaPtOperationAlphaOperationWithMetadata;
+    use super::raw::block_info::operationdenestdyn;
+    use super::raw::block_info::proto015ptlimaptoperationalphaoperationwithmetadata;
 
     use crate::core::ProtocolHash;
     use crate::core::PublicKeyHashV0;
