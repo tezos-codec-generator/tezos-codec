@@ -4,10 +4,48 @@ use rust_runtime::FixedBytes;
 
 use crate::traits::{AsPayload, Crypto};
 
+/// Simple struct representing BlockHash types
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BlockHash(FixedBytes<32>);
+
+impl BlockHash {
+    /// Reverse-engineered byte-level prefix to ensure Base58Check
+    /// output starts with the correct substring
+    pub const BASE58_PREFIX: [u8; 2] = [1, 52];
+}
+
+impl From<[u8; 32]> for BlockHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(FixedBytes::<32>::from(&value))
+    }
+}
+
+impl From<FixedBytes<32>> for BlockHash {
+    fn from(value: FixedBytes<32>) -> Self {
+        Self(value)
+    }
+}
+
+impl crate::traits::AsPayload for BlockHash {
+    fn as_payload(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl crate::traits::StaticPrefix for BlockHash {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl crate::traits::Crypto for BlockHash {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct ProtocolHash(FixedBytes<32>);
 
 impl ProtocolHash {
+    /// Reverse-engineered byte-level prefix to ensure Base58Check
+    /// output starts with the correct substring
     pub const BASE58_PREFIX: [u8; 2] = [2, 170];
 }
 
