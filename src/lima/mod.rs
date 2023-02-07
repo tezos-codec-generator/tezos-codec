@@ -13,6 +13,7 @@ macro_rules! from_pkh {
                     }
                 }
             }
+
             impl From<$id::PublicKeyHash> for $crate::core::PublicKeyHashV0 {
                 fn from(value: $id::PublicKeyHash) -> Self {
                     use $id::{ PublicKeyHash, publickeyhash::{ Ed25519, Secp256k1, P256 } };
@@ -28,6 +29,35 @@ macro_rules! from_pkh {
 }
 
 from_pkh!(baking_rights, constants, block_info);
+
+macro_rules! impl_crypto {
+    ($($tname:path),+ $(,)?) => {
+        $( impl $crate::traits::AsPayload for $tname {
+            fn as_payload(&self) -> &[u8] {
+                match &self.signature_v0_public_key_hash {
+                    baking_rights::PublicKeyHash::Ed25519(x) => x.ed25519_public_key_hash.as_slice(),
+                    baking_rights::PublicKeyHash::Secp256k1(x) => x.secp256k1_public_key_hash.as_slice(),
+                    baking_rights::PublicKeyHash::P256(x) => x.p256_public_key_hash.as_slice(),
+                }
+            }
+        }
+
+        impl $crate::traits::DynamicPrefix for $tname {
+            fn get_prefix(&self) -> &'static [u8] {
+                match &self.signature_v0_public_key_hash {
+                    baking_rights::PublicKeyHash::Ed25519(_) => &$crate::core::PublicKeyHashV0::ED25519_BASE58_PREFIX,
+                    baking_rights::PublicKeyHash::Secp256k1(_) => &$crate::core::PublicKeyHashV0::SECP256K1_BASE58_PREFIX,
+                    baking_rights::PublicKeyHash::P256(_) => &$crate::core::PublicKeyHashV0::P256_BASE58_PREFIX,
+                }
+            }
+        }
+
+        impl $crate::traits::Crypto for $tname {}
+        )+
+    };
+}
+
+impl_crypto!(baking_rights::Delegate, baking_rights::ConsensusKey);
 
 pub mod raw {
     pub use rustgen::proto015_ptlimapt::level::{ self as level };
