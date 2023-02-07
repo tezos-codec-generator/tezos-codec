@@ -30,10 +30,10 @@ macro_rules! from_pkh {
 from_pkh!(baking_rights, constants, block_info);
 
 pub mod raw {
-    pub use rustgen::proto015_ptlimapt::level;
-    pub use rustgen::proto015_ptlimapt::constants;
-    pub use rustgen::proto015_ptlimapt::block_info;
-    pub use rustgen::proto015_ptlimapt::baking_rights;
+    pub use rustgen::proto015_ptlimapt::level::{ self as level };
+    pub use rustgen::proto015_ptlimapt::constants::{ self as constants };
+    pub use rustgen::proto015_ptlimapt::block_info::{ self as block_info };
+    pub use rustgen::proto015_ptlimapt::baking_rights::{ self as baking_rights };
 
     pub(crate) use block_info::{ ChainId, Operation, Hash, RawBlockHeader, BlockHeaderMetadata };
 
