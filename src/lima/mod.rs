@@ -30,8 +30,22 @@ macro_rules! from_pkh {
 
 from_pkh!(baking_rights, constants, block_info);
 
-macro_rules! impl_crypto {
-    ($($tname:path),+ $(,)?) => {
+pub mod raw {
+    pub use rustgen::proto015_ptlimapt::level::{ self as level };
+    pub use rustgen::proto015_ptlimapt::constants::{ self as constants };
+    pub use rustgen::proto015_ptlimapt::block_info::{ self as block_info };
+    pub use rustgen::proto015_ptlimapt::baking_rights::{ self as baking_rights };
+
+    pub(crate) use block_info::{ ChainId, Operation, Hash, RawBlockHeader, BlockHeaderMetadata };
+
+    pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
+    pub type OperationResult =
+        block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult;
+    pub type BalanceUpdate = block_info::Proto015PtLimaPtOperationMetadataAlphaBalance;
+    pub type MichelsonExpression = block_info::MichelineProto015PtLimaPtMichelsonV1Expression;
+
+    macro_rules! impl_crypto {
+        ($($tname:path),+ $(,)?) => {
         $( impl $crate::traits::AsPayload for $tname {
             fn as_payload(&self) -> &[u8] {
                 match &self.signature_v0_public_key_hash {
@@ -54,24 +68,10 @@ macro_rules! impl_crypto {
 
         impl $crate::traits::Crypto for $tname {}
         )+
-    };
-}
+        };
+    }
 
-impl_crypto!(baking_rights::Delegate, baking_rights::ConsensusKey);
-
-pub mod raw {
-    pub use rustgen::proto015_ptlimapt::level::{ self as level };
-    pub use rustgen::proto015_ptlimapt::constants::{ self as constants };
-    pub use rustgen::proto015_ptlimapt::block_info::{ self as block_info };
-    pub use rustgen::proto015_ptlimapt::baking_rights::{ self as baking_rights };
-
-    pub(crate) use block_info::{ ChainId, Operation, Hash, RawBlockHeader, BlockHeaderMetadata };
-
-    pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
-    pub type OperationResult =
-        block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult;
-    pub type BalanceUpdate = block_info::Proto015PtLimaPtOperationMetadataAlphaBalance;
-    pub type MichelsonExpression = block_info::MichelineProto015PtLimaPtMichelsonV1Expression;
+    impl_crypto!(baking_rights::Delegate, baking_rights::ConsensusKey);
 }
 
 pub mod api {
