@@ -310,5 +310,33 @@ pub mod api {
                 .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
                 .collect()
         }
+
+        pub fn metadata(&self) -> &Option<LimaMetadata> {
+            &self.metadata
+        }
+
+        pub fn metadata_mut(&mut self) -> &mut Option<LimaMetadata> {
+            &mut self.metadata
+        }
+
+        pub fn operations(&self) -> &Vec<Vec<LimaOperation>> {
+            &self.operations
+        }
+
+        pub fn operations_mut(&mut self) -> &mut Vec<Vec<LimaOperation>> {
+            &mut self.operations
+        }
+
+        pub fn chain_id(&self) -> &LimaChainId {
+            &self.chain_id
+        }
+
+        pub fn hash(&self) -> &LimaBlockHash {
+            &self.hash
+        }
+
+        pub fn header(&self) -> &LimaBlockHeader {
+            &self.header
+        }
     }
 }
