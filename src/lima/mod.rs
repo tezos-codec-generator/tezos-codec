@@ -167,6 +167,29 @@ pub mod api {
         ballot: Ballot,
     }
 
+    impl LimaBallot {
+        pub fn new(source: PublicKeyHashV0, period: i32, proposal: ProtocolHash, ballot: Ballot) -> Self {
+            Self { source, period, proposal, ballot }
+        }
+
+        pub fn source(&self) -> PublicKeyHashV0 {
+            self.source
+        }
+
+        pub fn period(&self) -> i32 {
+            self.period
+        }
+
+        pub fn proposal(&self) -> ProtocolHash {
+            self.proposal
+        }
+
+        pub fn ballot(&self) -> Ballot {
+            self.ballot
+        }
+}
+
+
     impl std::fmt::Display for LimaBallot {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
