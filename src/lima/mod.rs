@@ -3,6 +3,17 @@ use rustgen::proto015_ptlimapt::{ block_info, baking_rights, constants };
 macro_rules! from_pkh {
     ($($id:ident),+ $(,)?) => {
         $(
+            impl From<$crate::core::PublicKeyHashV0> for $id::PublicKeyHash {
+                fn from(value: $crate::core::PublicKeyHashV0) -> Self {
+                    use $id::publickeyhash::{ Ed25519, Secp256k1, P256 };
+                    match value {
+                        $crate::core::PublicKeyHashV0::Ed25519(ed25519_public_key_hash) => Self::Ed25519(Ed25519 { ed25519_public_key_hash }),
+                        $crate::core::PublicKeyHashV0::Secp256k1(secp256k1_public_key_hash) => Self::Secp256k1(Secp256k1 { secp256k1_public_key_hash }),
+                        $crate::core::PublicKeyHashV0::P256(p256_public_key_hash) => Self::P256(P256 { p256_public_key_hash }),
+                    }
+                }
+            }
+
             impl From<&'_ $id::PublicKeyHash> for $crate::core::PublicKeyHashV0 {
                 fn from(value: &'_ $id::PublicKeyHash) -> Self {
                     use $id::{ PublicKeyHash, publickeyhash::{ Ed25519, Secp256k1, P256 } };
