@@ -4,6 +4,7 @@ extern crate rust_runtime;
 pub use rust_runtime::*;
 
 pub mod core;
+pub mod util;
 
 pub mod traits;
 

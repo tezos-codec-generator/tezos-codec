@@ -2,7 +2,73 @@ pub mod base58;
 
 use rust_runtime::FixedBytes;
 
-use crate::traits::{AsPayload, Crypto, StaticPrefix};
+use crate::traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix };
+
+/// Newtype struct representing a unified (protocol-invariant) chain-identifier,
+/// as a 4-byte blob
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ChainId(FixedBytes<4>);
+
+impl crate::traits::BinaryDataType<4> for ChainId {
+    fn as_array_ref(&self) -> &[u8; 4] {
+        self.0.as_ref()
+    }
+
+    fn as_fixed_bytes(&self) -> &rust_runtime::FixedBytes<4> {
+        &self.0
+    }
+}
+
+impl ChainId {
+    #[must_use]
+    #[inline(always)]
+    /// Constructs a [`ChainId`] from a [`FixedBytes<4>`] value
+    pub fn from_fixed_bytes(fixed_bytes: FixedBytes<4>) -> Self {
+        Self(fixed_bytes)
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn from_byte_array(bytes: [u8; 4]) -> Self {
+        Self(bytes.into())
+    }
+}
+
+impl From<&'_ [u8; 4]> for ChainId {
+    fn from(value: &'_ [u8; 4]) -> Self {
+        Self(FixedBytes::<4>::from(value))
+    }
+}
+
+impl From<[u8; 4]> for ChainId {
+    fn from(value: [u8; 4]) -> Self {
+        Self(FixedBytes::<4>::from(&value))
+    }
+}
+
+impl From<FixedBytes<4>> for ChainId {
+    fn from(value: FixedBytes<4>) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<FixedBytes<4>> for ChainId {
+    fn as_ref(&self) -> &FixedBytes<4> {
+        &self.0
+    }
+}
+
+impl AsRef<[u8; 4]> for ChainId {
+    fn as_ref(&self) -> &[u8; 4] {
+        self.0.as_ref()
+    }
+}
+
+impl AsPayload for ChainId {
+    fn as_payload(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 /// Simple struct representing BlockHash types
 #[repr(transparent)]
@@ -48,7 +114,6 @@ impl ProtocolHash {
     /// output starts with the correct substring
     pub const BASE58_PREFIX: [u8; 2] = [2, 170];
 }
-
 
 impl From<[u8; 32]> for ProtocolHash {
     fn from(value: [u8; 32]) -> Self {
@@ -145,18 +210,16 @@ pub enum PublicKeyHashV0 {
 }
 
 impl PublicKeyHashV0 {
-    pub const ED25519_BASE58_PREFIX : [u8; 3] = [6, 161, 159];
-    pub const SECP256K1_BASE58_PREFIX : [u8; 3] = [6, 161, 161];
-    pub const P256_BASE58_PREFIX : [u8; 3] = [6, 161, 164];
+    pub const ED25519_BASE58_PREFIX: [u8; 3] = [6, 161, 159];
+    pub const SECP256K1_BASE58_PREFIX: [u8; 3] = [6, 161, 161];
+    pub const P256_BASE58_PREFIX: [u8; 3] = [6, 161, 164];
 
     #[must_use]
     #[inline]
     /// Returns a reference to the
     pub const fn as_fixed_bytes(&self) -> &FixedBytes<20> {
         match self {
-            | Self::Ed25519(bytes)
-            | Self::Secp256k1(bytes)
-            | Self::P256(bytes) => bytes,
+            Self::Ed25519(bytes) | Self::Secp256k1(bytes) | Self::P256(bytes) => bytes,
         }
     }
 
@@ -169,7 +232,7 @@ impl PublicKeyHashV0 {
     }
 }
 
-impl crate::traits::DynamicPrefix for PublicKeyHashV0 {
+impl DynamicPrefix for PublicKeyHashV0 {
     fn get_prefix(&self) -> &'static [u8] {
         match self {
             PublicKeyHashV0::Ed25519(_) => &Self::ED25519_BASE58_PREFIX,
@@ -186,8 +249,7 @@ impl AsPayload for PublicKeyHashV0 {
     }
 }
 
-impl Crypto for PublicKeyHashV0 { }
-
+impl Crypto for PublicKeyHashV0 {}
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

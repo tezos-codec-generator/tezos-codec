@@ -1,7 +1,24 @@
+/// Trait for types that store fixed-size binary data in a consistent
+/// way across multiple protocols
+pub trait BinaryDataType<const N: usize>: AsPayload + Copy {
+    const DATA_LEN : usize = N;
+
+    fn as_array_ref(&self) -> &[u8; N];
+
+    fn as_fixed_bytes(&self) -> &rust_runtime::FixedBytes<N>;
+}
+
 pub trait ContainsBallots {
     type BallotType;
 
+    fn has_ballots(&self) -> bool;
+
+    fn count_ballots(&self) -> usize;
+
     fn get_ballots(&self) -> Vec<Self::BallotType>;
+}
+pub trait ContainsBallotsExt: ContainsBallots {
+    fn tally(&self) -> crate::util::VoteStatistics;
 }
 
 pub trait AsPayload {
