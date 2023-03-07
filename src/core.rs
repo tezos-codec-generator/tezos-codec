@@ -1,20 +1,103 @@
 pub mod base58;
 
-use rust_runtime::FixedBytes;
+use tedium::FixedBytes;
 
-use crate::traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix };
+use crate::traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix, BinaryDataType };
+
+/// Cross-protocol type for representing 32-byte cryptographic
+/// digests of arbitrary operation payloads.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OperationHash(FixedBytes<32>);
+
+impl BinaryDataType<32> for OperationHash {
+    fn as_array_ref(&self) -> &[u8; 32] {
+        self.0.bytes()
+    }
+
+    fn as_fixed_bytes(&self) -> &FixedBytes<32> {
+        &self.0
+    }
+}
+
+impl OperationHash {
+    pub const BASE58_PREFIX : [u8; 2] = [5, 116];
+
+    #[inline]
+    #[must_use]
+    /// Promotes a raw [`FixedBytes<32>`] value into a reified [`OperationHash`].
+    pub const fn from_fixed_bytes(fixed_bytes: FixedBytes<32>) -> Self {
+        Self(fixed_bytes)
+    }
+
+    #[inline]
+    #[must_use]
+    /// Promotes a raw [`[u8; 32]`] value into a reified [`OperationHash`].
+    pub const fn from_byte_array(bytes: [u8; 32]) -> Self {
+        Self(FixedBytes::from_array(bytes))
+    }
+}
+
+impl AsPayload for OperationHash {
+    fn as_payload(&self) -> &[u8] {
+        self.0.bytes()
+    }
+}
+
+impl StaticPrefix for OperationHash {
+    const PREFIX : &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl Crypto for OperationHash {
+}
+
+impl AsRef<[u8; 32]> for OperationHash {
+    fn as_ref(&self) -> &[u8; 32] {
+        self.0.bytes()
+    }
+}
+
+impl AsRef<[u8]> for OperationHash {
+    fn as_ref(&self) -> &[u8] {
+        self.0.bytes()
+    }
+}
+
+impl AsRef<FixedBytes<32>> for OperationHash {
+    fn as_ref(&self) -> &FixedBytes<32> {
+        &self.0
+    }
+}
+
+impl From<[u8; 32]> for OperationHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self::from_byte_array(value)
+    }
+}
+
+impl From<&'_ [u8; 32]> for OperationHash {
+    fn from(value: &'_ [u8; 32]) -> Self {
+        Self::from_byte_array(*value)
+    }
+}
+
+impl From<FixedBytes<32>> for OperationHash {
+    fn from(value: FixedBytes<32>) -> Self {
+        Self(value)
+    }
+}
 
 /// Newtype struct representing a unified (protocol-invariant) chain-identifier,
 /// as a 4-byte blob
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChainId(FixedBytes<4>);
 
-impl crate::traits::BinaryDataType<4> for ChainId {
+impl BinaryDataType<4> for ChainId {
     fn as_array_ref(&self) -> &[u8; 4] {
-        self.0.as_ref()
+        self.0.bytes()
     }
 
-    fn as_fixed_bytes(&self) -> &rust_runtime::FixedBytes<4> {
+    fn as_fixed_bytes(&self) -> &FixedBytes<4> {
         &self.0
     }
 }
@@ -22,13 +105,14 @@ impl crate::traits::BinaryDataType<4> for ChainId {
 impl ChainId {
     #[must_use]
     #[inline(always)]
-    /// Constructs a [`ChainId`] from a [`FixedBytes<4>`] value
-    pub fn from_fixed_bytes(fixed_bytes: FixedBytes<4>) -> Self {
+    /// Promotes a raw [`FixedBytes<4>`] value into a reified [`ChainId`].
+    pub const fn from_fixed_bytes(fixed_bytes: FixedBytes<4>) -> Self {
         Self(fixed_bytes)
     }
 
     #[must_use]
     #[inline]
+    /// Promotes a raw [`[u8; 4]`] value into a reified [`ChainId`].
     pub fn from_byte_array(bytes: [u8; 4]) -> Self {
         Self(bytes.into())
     }
@@ -225,9 +309,9 @@ impl PublicKeyHashV0 {
 
     pub const fn as_bytes(&self) -> &[u8; 20] {
         match self {
-            Self::Ed25519(bytes) => bytes.as_slice(),
-            Self::Secp256k1(bytes) => bytes.as_slice(),
-            Self::P256(bytes) => bytes.as_slice(),
+            Self::Ed25519(bytes) => bytes.bytes(),
+            Self::Secp256k1(bytes) => bytes.bytes(),
+            Self::P256(bytes) => bytes.bytes(),
         }
     }
 }

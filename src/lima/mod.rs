@@ -1,4 +1,4 @@
-use rustgen::proto015_ptlimapt::{ block_info, baking_rights, constants };
+use tezos_codegen::proto015_ptlimapt::{ block_info, baking_rights, constants };
 
 macro_rules! from_pkh {
     ($($id:ident),+ $(,)?) => {
@@ -42,17 +42,12 @@ macro_rules! from_pkh {
 from_pkh!(baking_rights, constants, block_info);
 
 pub mod raw {
-    pub use rustgen::proto015_ptlimapt::level::{ self as level };
-    pub use rustgen::proto015_ptlimapt::constants::{ self as constants };
-    pub use rustgen::proto015_ptlimapt::block_info::{ self as block_info };
-    pub use rustgen::proto015_ptlimapt::baking_rights::{ self as baking_rights };
+    pub use tezos_codegen::proto015_ptlimapt::level;
+    pub use tezos_codegen::proto015_ptlimapt::constants;
+    pub use tezos_codegen::proto015_ptlimapt::block_info;
+    pub use tezos_codegen::proto015_ptlimapt::baking_rights;
 
-    pub(crate) use block_info::{
-        Operation,
-        OperationHash,
-        RawBlockHeader,
-        BlockHeaderMetadata,
-    };
+    pub(crate) use block_info::{ Operation, OperationHash, RawBlockHeader, BlockHeaderMetadata };
 
     pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
     pub type OperationResult =
@@ -65,9 +60,9 @@ pub mod raw {
         $( impl $crate::traits::AsPayload for $tname {
             fn as_payload(&self) -> &[u8] {
                 match &self.signature_v0_public_key_hash {
-                    baking_rights::PublicKeyHash::Ed25519(x) => x.ed25519_public_key_hash.as_slice(),
-                    baking_rights::PublicKeyHash::Secp256k1(x) => x.secp256k1_public_key_hash.as_slice(),
-                    baking_rights::PublicKeyHash::P256(x) => x.p256_public_key_hash.as_slice(),
+                    baking_rights::PublicKeyHash::Ed25519(x) => x.ed25519_public_key_hash.bytes(),
+                    baking_rights::PublicKeyHash::Secp256k1(x) => x.secp256k1_public_key_hash.bytes(),
+                    baking_rights::PublicKeyHash::P256(x) => x.p256_public_key_hash.bytes(),
                 }
             }
         }
@@ -91,19 +86,18 @@ pub mod raw {
 }
 
 pub mod api {
-    use rust_runtime::{ Dynamic, Sequence, u30 };
+    use tedium::{ Dynamic, Sequence, u30 };
     use super::raw::{
         self,
         block_info::{
+            Proto015PtLimaPtOperationAlphaContents,
+            Proto015PtLimaPtOperationAlphaOperationWithMetadata,
             Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
             OperationDenestDyn,
-            Proto015PtLimaPtOperationAlphaOperationWithMetadata,
         },
     };
 
     use crate::{ core::{ ProtocolHash, PublicKeyHashV0 }, traits::{ ContainsBallots, Crypto } };
-
-    use super::block_info::Proto015PtLimaPtOperationAlphaContents;
 
     pub type LimaBlockHeader = raw::RawBlockHeader;
     pub type LimaMetadata = raw::BlockHeaderMetadata;
@@ -130,10 +124,9 @@ pub mod api {
                 ddx
                     .into_inner()
                     .into_inner()
-
                     .into_iter()
                     .map(|op| op.into())
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<LimaOperation>>()
             )
             .collect()
     }
@@ -151,41 +144,73 @@ pub mod api {
     }
 
     impl LimaBlockInfo {
+        /// Returns a [Vec] containing every [LimaBallot] operation included in this [LimaBlockInfo].
         pub fn get_all_ballots(&self) -> Vec<LimaBallot> {
             self.operations
                 .iter()
                 .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
                 .collect()
         }
+    }
 
+    impl LimaBlockInfo {
+        /// Returns the (optional) `metadata` field associated with this [`LimaBlockInfo`].
         pub fn metadata(&self) -> &Option<LimaMetadata> {
             &self.metadata
         }
 
+        /// Returns a mutable reference to the `metadata` field of this [`LimaBlockInfo`].
         pub fn metadata_mut(&mut self) -> &mut Option<LimaMetadata> {
             &mut self.metadata
         }
 
+        /// Returns a reference to the `operations` field of this [`LimaBlockInfo`].
         pub fn operations(&self) -> &Vec<Vec<LimaOperation>> {
             &self.operations
         }
 
+        /// Returns a mutable reference to the `operations` field of this [`LimaBlockInfo`].
         pub fn operations_mut(&mut self) -> &mut Vec<Vec<LimaOperation>> {
             &mut self.operations
         }
 
+        /// Returns a reference to the [ChainId] associated with this [`LimaBlockInfo`].
         pub fn chain_id(&self) -> &crate::core::ChainId {
             &self.chain_id
         }
 
+        /// Returns a reference to the [BlockHash] associated with this [`LimaBlockInfo`].
         pub fn hash(&self) -> &crate::core::BlockHash {
             &self.hash
         }
 
+        /// Returns a reference to the `header` field of this [`LimaBlockInfo`]
         pub fn header(&self) -> &LimaBlockHeader {
             &self.header
         }
     }
+
+    /// Outermost type used to represent operation-data within a [`LimaBlockInfo`] object.
+    ///
+    /// Primarily contains a value of type [`LimaOperationPayload`], along with a [`ChainId`]
+    /// and [`OperationHash`]
+    #[derive(Clone, Debug, PartialEq, Hash)]
+    pub struct LimaOperation {
+        chain_id: crate::core::ChainId,
+        hash: LimaOperationHash,
+        operation: LimaOperationPayload,
+    }
+
+    impl From<super::raw::block_info::Operation> for LimaOperation {
+        fn from(value: super::raw::block_info::Operation) -> Self {
+            Self {
+                chain_id: crate::core::ChainId::from_fixed_bytes(value.chain_id.chain_id),
+                hash: value.hash,
+                operation: LimaOperationPayload::from(value.operation_rhs),
+            }
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq, Hash)]
     pub struct LimaOperationPayload {
         shell_header: LimaOperationShellHeader,
@@ -402,23 +427,6 @@ pub mod api {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Hash)]
-    pub struct LimaOperation {
-        chain_id: crate::core::ChainId,
-        hash: LimaOperationHash,
-        operation: LimaOperationPayload,
-    }
-
-    impl From<super::raw::block_info::Operation> for LimaOperation {
-        fn from(value: super::raw::block_info::Operation) -> Self {
-            Self {
-                chain_id: crate::core::ChainId::from_fixed_bytes(value.chain_id.chain_id),
-                hash: value.hash,
-                operation: LimaOperationPayload::from(value.operation_rhs),
-            }
-        }
-    }
-
     #[repr(i8)]
     #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
     pub enum Ballot {
@@ -490,6 +498,9 @@ pub mod api {
     }
 
     impl LimaBallot {
+        #[inline(always)]
+        #[must_use]
+        /// Creates a new [`LimaBallot`] with the given parameters as its respective fields.
         pub fn new(
             source: PublicKeyHashV0,
             period: i32,
@@ -499,18 +510,30 @@ pub mod api {
             Self { source, period, proposal, ballot }
         }
 
+        #[inline(always)]
+        #[must_use]
+        /// Returns the public-key hash (v0) of this [`LimaBallot`]'s source address.
         pub fn source(&self) -> PublicKeyHashV0 {
             self.source
         }
 
-        pub fn period(&self) -> i32 {
+        #[inline(always)]
+        #[must_use]
+        /// Returns the voting period associated with this [`LimaBallot`].
+        pub const fn period(&self) -> i32 {
             self.period
         }
 
+        #[inline(always)]
+        #[must_use]
+        /// Returns the protocol hash this [`LimaBallot`] is voting with reference to.
         pub fn proposal(&self) -> ProtocolHash {
             self.proposal
         }
 
+        #[inline(always)]
+        #[must_use]
+        /// Returns the type of vote this [`LimaBallot`] represents (i.e. `Ballot::Yay`, `Ballot::Nay`, or `Ballot::Pass`).
         pub fn ballot(&self) -> Ballot {
             self.ballot
         }
@@ -567,7 +590,7 @@ pub mod api {
 
     impl ContainsBallots
     for
-    rustgen::proto015_ptlimapt::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResult {
+    tezos_codegen::proto015_ptlimapt::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResult {
         type BallotType = LimaBallot;
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {

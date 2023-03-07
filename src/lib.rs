@@ -1,7 +1,7 @@
-extern crate rustgen;
-extern crate rust_runtime;
+extern crate tezos_codegen;
+extern crate tedium;
 
-pub use rust_runtime::*;
+pub use tedium::*;
 
 pub mod core;
 pub mod util;
