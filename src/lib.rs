@@ -1,5 +1,7 @@
 extern crate tezos_codegen;
 extern crate tedium;
+// #[macro_use]
+extern crate serde;
 
 pub use tedium::*;
 

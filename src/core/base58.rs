@@ -8,6 +8,7 @@ fn double_sha256(payload: &[u8]) -> Vec<u8> {
     <Sha256 as Digest>::digest(&tmp).as_slice()[0..4].to_vec()
 }
 
+/// Returns the Base58Check digest [`String`] of a binary buffer.
 fn safe_encode(payload: &[u8]) -> String {
     let mut buf = payload.to_vec();
     let mut check = double_sha256(payload);
@@ -15,7 +16,8 @@ fn safe_encode(payload: &[u8]) -> String {
     buf.to_base58()
 }
 
-pub fn raw_base58check(payload: &impl AsRef<[u8]>) -> String {
+/// Returns the Base58Check digest over arbitrary binary-convertible types.
+pub fn to_base58check_raw(payload: &impl AsRef<[u8]>) -> String {
     safe_encode(payload.as_ref())
 }
 

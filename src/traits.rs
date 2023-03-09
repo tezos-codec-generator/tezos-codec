@@ -1,10 +1,12 @@
 /// Trait for types that store fixed-size binary data in a consistent
 /// way across multiple protocols
 pub trait BinaryDataType<const N: usize>: AsPayload + Copy {
-    const DATA_LEN : usize = N;
+    const DATA_LEN: usize = N;
 
+    /// Extracts an immutable array reference from `self`.
     fn as_array_ref(&self) -> &[u8; N];
 
+    /// Extracts an immutable [`FixedBytes`] reference from `self`.
     fn as_fixed_bytes(&self) -> &tedium::FixedBytes<N>;
 }
 
@@ -64,13 +66,34 @@ impl<C: StaticPrefix + Sized> DynamicPrefix for C {
     }
 }
 
-
 pub trait Crypto: AsPayload + DynamicPrefix {
     /// Returns a Base58Check-encoded String informed by the binary prefix
     /// signified by the type and value of `self`.
     fn to_base58check(&self) -> String {
-        let prefix : &'static [u8] = self.get_prefix();
-        let payload : &[u8] = self.as_payload();
+        let prefix: &'static [u8] = self.get_prefix();
+        let payload: &[u8] = self.as_payload();
         crate::core::base58::to_base58check(prefix, payload)
     }
+
+    /// [`std::fmt::Display`]-style formatting function for writing the string
+    /// representation of a Crypto type.
+    fn base58check_fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(&self.to_base58check())
+    }
+}
+
+#[macro_export]
+/// Macro for implementing [`std::fmt::Display`] on `Crypto` types via their
+/// implicit human-readable string representation (i.e. Base58Check).
+///
+/// Accepts a comma-separated list of type-names to implement Display over,
+/// with trailing commas allowed.
+macro_rules! impl_crypto_display {
+    ($($tname:ident),+ $(,)?) => {
+        $( impl std::fmt::Display for $tname {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                <Self as $crate::traits::Crypto>::base58check_fmt(&self, f)
+            }
+        } )+
+    };
 }

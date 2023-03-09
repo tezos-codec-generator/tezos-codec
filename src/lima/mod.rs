@@ -47,7 +47,7 @@ pub mod raw {
     pub use tezos_codegen::proto015_ptlimapt::block_info;
     pub use tezos_codegen::proto015_ptlimapt::baking_rights;
 
-    pub(crate) use block_info::{ Operation, OperationHash, RawBlockHeader, BlockHeaderMetadata };
+    pub(crate) use block_info::{ Operation, RawBlockHeader, BlockHeaderMetadata };
 
     pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
     pub type OperationResult =
@@ -97,21 +97,121 @@ pub mod api {
         },
     };
 
-    use crate::{ core::{ ProtocolHash, PublicKeyHashV0 }, traits::{ ContainsBallots, Crypto } };
+    use crate::{
+        core::{ ProtocolHash, PublicKeyHashV0, BlockHash, ChainId },
+        traits::{ ContainsBallots, Crypto, StaticPrefix },
+    };
 
-    pub type LimaBlockHeader = raw::RawBlockHeader;
+
+    crate::boilerplate!(LimaBlockPayloadHash = 32);
+    crate::impl_crypto_display!(LimaBlockPayloadHash);
+
+    impl LimaBlockPayloadHash {
+        /// Preimage bytes for ciphertext prefix `vh`.
+        pub const BASE58_PREFIX: [u8; 3] = [1, 106, 242];
+    }
+
+    impl crate::traits::StaticPrefix for LimaBlockPayloadHash {
+        const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+    }
+
+    impl crate::traits::Crypto for LimaBlockPayloadHash {}
+
+
+    crate::boilerplate!(LimaProofOfWorkNonce = 8);
+
+    crate::boilerplate!(LimaNonceHash = 32);
+    crate::impl_crypto_display!(LimaNonceHash);
+
+    impl LimaNonceHash {
+        /// Preimage bytes for ciphertext prefix `nce`.
+        pub const BASE58_PREFIX : [u8; 3] = [69, 220, 169];
+    }
+
+    impl StaticPrefix for LimaNonceHash {
+        const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+    }
+    impl Crypto for LimaNonceHash {}
+
+    // pub type LimaBlockHeader = raw::RawBlockHeader;
+
+    #[derive(Clone, Debug, PartialEq, Hash)]
+    pub struct LimaBlockHeader {
+        level: i32,
+        proto: u8,
+        predecessor: BlockHash,
+        timestamp: crate::core::Timestamp,
+        validation_pass: u8,
+        operations_hash: crate::core::OperationListListHash,
+        fitness: Vec<tedium::Bytes>,
+        context: crate::core::ContextHash,
+        payload_hash: LimaBlockPayloadHash,
+        payload_round: i32,
+        proof_of_work_nonce: LimaProofOfWorkNonce,
+        seed_nonce_hash: Option<LimaNonceHash>,
+        liquidity_baking_toggle_vote: i8,
+        signature: crate::core::SignatureV0,
+    }
+
+    impl From<raw::RawBlockHeader> for LimaBlockHeader {
+        fn from(value: raw::RawBlockHeader) -> Self {
+            Self {
+                level: value.level,
+                proto: value.proto,
+                predecessor: BlockHash::from_fixed_bytes(value.predecessor.block_hash),
+                timestamp: crate::core::Timestamp::from_i64(value.timestamp),
+                validation_pass: value.validation_pass,
+                operations_hash: crate::core::OperationListListHash::from_fixed_bytes(value.operations_hash.operation_list_list_hash),
+                fitness: value.fitness.into_inner().into_iter().map(|elt| elt.into_inner()).collect(),
+                context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
+                payload_hash: LimaBlockPayloadHash::from_fixed_bytes(value.payload_hash.value_hash),
+                payload_round: value.payload_round,
+                proof_of_work_nonce: LimaProofOfWorkNonce::from_fixed_bytes(value.proof_of_work_nonce),
+                seed_nonce_hash: value.seed_nonce_hash.map(|nonce| LimaNonceHash::from_fixed_bytes(nonce.cycle_nonce)),
+                liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
+                signature: crate::core::SignatureV0::from_fixed_bytes(value.signature.signature_v0),
+            }
+        }
+    }
+
     pub type LimaMetadata = raw::BlockHeaderMetadata;
-    pub type LimaOperationHash = raw::OperationHash;
-    pub type LimaOperationShellHeader = raw::block_info::OperationShellHeader;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct LimaOperationShellHeader {
+        branch: BlockHash,
+    }
+
+    impl From<super::raw::block_info::OperationShellHeader> for LimaOperationShellHeader {
+        fn from(value: super::raw::block_info::OperationShellHeader) -> Self {
+            Self { branch: BlockHash::from_fixed_bytes(value.branch.block_hash) }
+        }
+    }
+
+    impl LimaOperationShellHeader {
+        pub const fn branch(&self) -> &BlockHash {
+            &self.branch
+        }
+
+        pub const fn into_branch(self) -> BlockHash {
+            self.branch
+        }
+    }
 
     /// Cross-module canonical type for Lima `block_info` values
     #[derive(Clone, Debug, Hash, PartialEq)]
     pub struct LimaBlockInfo {
-        chain_id: crate::core::ChainId,
-        hash: crate::core::BlockHash,
+        chain_id: ChainId,
+        hash: BlockHash,
         header: LimaBlockHeader,
         metadata: Option<LimaMetadata>,
         operations: Vec<Vec<LimaOperation>>,
+    }
+
+    impl tedium::Decode for LimaBlockInfo {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            let raw : raw::BlockInfo = raw::BlockInfo::parse(p)?;
+            Ok(raw.into())
+        }
     }
 
     fn unpack_block_operations(
@@ -134,8 +234,8 @@ pub mod api {
     impl From<raw::BlockInfo> for LimaBlockInfo {
         fn from(value: raw::BlockInfo) -> Self {
             Self {
-                chain_id: crate::core::ChainId::from_fixed_bytes(value.chain_id.chain_id),
-                hash: crate::core::BlockHash::from(value.hash.block_hash),
+                chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
+                hash: BlockHash::from(value.hash.block_hash),
                 header: LimaBlockHeader::from(value.header.into_inner()),
                 metadata: value.metadata.map(|x| LimaMetadata::from(x.into_inner())),
                 operations: unpack_block_operations(value.operations),
@@ -175,12 +275,12 @@ pub mod api {
         }
 
         /// Returns a reference to the [ChainId] associated with this [`LimaBlockInfo`].
-        pub fn chain_id(&self) -> &crate::core::ChainId {
+        pub fn chain_id(&self) -> &ChainId {
             &self.chain_id
         }
 
         /// Returns a reference to the [BlockHash] associated with this [`LimaBlockInfo`].
-        pub fn hash(&self) -> &crate::core::BlockHash {
+        pub fn hash(&self) -> &BlockHash {
             &self.hash
         }
 
@@ -196,16 +296,16 @@ pub mod api {
     /// and [`OperationHash`]
     #[derive(Clone, Debug, PartialEq, Hash)]
     pub struct LimaOperation {
-        chain_id: crate::core::ChainId,
-        hash: LimaOperationHash,
+        chain_id: ChainId,
+        hash: crate::core::OperationHash,
         operation: LimaOperationPayload,
     }
 
     impl From<super::raw::block_info::Operation> for LimaOperation {
         fn from(value: super::raw::block_info::Operation) -> Self {
             Self {
-                chain_id: crate::core::ChainId::from_fixed_bytes(value.chain_id.chain_id),
-                hash: value.hash,
+                chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
+                hash: crate::core::OperationHash::from_fixed_bytes(value.hash.operation_hash),
                 operation: LimaOperationPayload::from(value.operation_rhs),
             }
         }
@@ -236,7 +336,7 @@ pub mod api {
     impl From<super::raw::block_info::OperationRhs> for LimaOperationPayload {
         fn from(value: super::raw::block_info::OperationRhs) -> Self {
             Self {
-                shell_header: value.0.into_inner(),
+                shell_header: LimaOperationShellHeader::from(value.0.into_inner()),
                 operation: LimaOperationContainer::from(value.1.into_inner()),
             }
         }
