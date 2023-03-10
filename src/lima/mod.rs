@@ -153,6 +153,14 @@ pub mod api {
         signature: crate::core::SignatureV0,
     }
 
+    impl LimaBlockHeader {
+        #[inline(always)]
+        /// Returns the block-level stored in this [`LimaBlockHeader`].
+        pub const fn level(&self) -> i32 {
+            self.level
+        }
+    }
+
     impl From<raw::RawBlockHeader> for LimaBlockHeader {
         fn from(value: raw::RawBlockHeader) -> Self {
             Self {
