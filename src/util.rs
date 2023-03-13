@@ -26,5 +26,28 @@ impl std::ops::AddAssign for VoteStatistics {
 }
 
 impl VoteStatistics {
+    /// Creates a new [`VoteStatistics`] based on the values of the three individual metrics.
+    pub const fn new(yay_count: usize, nay_count: usize, pass_count: usize) -> Self {
+        Self { yay_count, nay_count, pass_count }
+    }
 
+    #[inline]
+    pub const fn count(&self) -> usize {
+        self.yay_count + self.nay_count + self.pass_count
+    }
+
+    /// Returns the `yay_count` field of this [`VoteStatistics`].
+    pub const fn yay_count(&self) -> usize {
+        self.yay_count
+    }
+
+    /// Returns the `nay_count` field of this [`VoteStatistics`].
+    pub const fn nay_count(&self) -> usize {
+        self.yay_count
+    }
+
+    /// Returns the `pass_count` field of this [`VoteStatistics`].
+    pub const fn pass_count(&self) -> usize {
+        self.pass_count
+    }
 }
