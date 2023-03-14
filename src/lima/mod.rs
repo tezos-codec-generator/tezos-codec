@@ -251,6 +251,32 @@ pub mod api {
         }
     }
 
+    impl ContainsBallots for LimaBlockInfo {
+        type BallotType = LimaBallot;
+
+        fn has_ballots(&self) -> bool {
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
+        }
+
+        fn count_ballots(&self) -> usize {
+            self.operations.iter().fold(
+                0usize,
+                |major, ops| {
+                    ops.iter().fold(major, |minor, op| {
+                        minor + op.count_ballots()
+                    })
+                }
+            )
+        }
+
+        fn get_ballots(&self) -> Vec<Self::BallotType> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
+                .collect()
+        }
+    }
+
     impl LimaBlockInfo {
         /// Returns a [Vec] containing every [LimaBallot] operation included in this [LimaBlockInfo].
         pub fn get_all_ballots(&self) -> Vec<LimaBallot> {
