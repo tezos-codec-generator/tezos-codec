@@ -10,6 +10,13 @@ pub trait BinaryDataType<const N: usize>: AsPayload + Copy {
     fn as_fixed_bytes(&self) -> &tedium::FixedBytes<N>;
 }
 
+/// Marker trait for types representing Ballot values (yay, nay, pass).
+pub trait BallotLike {
+    /// Returns a [`VoteStatistics`] object that accurately classifies
+    /// this ballot-like type.
+    fn to_tally(&self) -> crate::util::VoteStatistics;
+}
+
 pub trait ContainsBallots {
     /// Specific type used to represent the ballot operations that are
     /// possibly contained within values of [`Self`].
@@ -30,6 +37,20 @@ pub trait ContainsBallotsExt: ContainsBallots {
     /// Computes and returns a summary table of the voting statistics for
     /// the set of ballots that are recursively contained within this object.
     fn tally(&self) -> crate::util::VoteStatistics;
+}
+
+impl<T> ContainsBallotsExt
+    for T
+    where T: ContainsBallots, <T as ContainsBallots>::BallotType: BallotLike
+{
+    fn tally(&self) -> crate::util::VoteStatistics {
+        let tmp = self.get_ballots();
+        let mut ret = crate::util::VoteStatistics::default();
+        tmp.iter().for_each(|ballot| {
+            ret += ballot.to_tally();
+        });
+        ret
+    }
 }
 
 /// Marker trait for types that are byte-oriented containers with a nominal

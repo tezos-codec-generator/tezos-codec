@@ -605,6 +605,22 @@ pub mod api {
         ballot: Ballot,
     }
 
+    impl crate::traits::BallotLike for Ballot {
+        fn to_tally(&self) -> crate::util::VoteStatistics {
+            match self {
+                Ballot::Yay => crate::util::VoteStatistics::new(1, 0, 0),
+                Ballot::Nay => crate::util::VoteStatistics::new(0, 1, 0),
+                Ballot::Pass => crate::util::VoteStatistics::new(0, 0, 1),
+            }
+        }
+    }
+
+    impl crate::traits::BallotLike for LimaBallot {
+        fn to_tally(&self) -> crate::util::VoteStatistics {
+            self.ballot.to_tally()
+        }
+    }
+
     impl LimaBallot {
         #[inline(always)]
         #[must_use]
