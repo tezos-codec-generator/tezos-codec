@@ -11,7 +11,10 @@ bench = false
 
 [dependencies]
 tezos-data-model = { git = "https://github.com/tezos-codec-generator/tezos-data-model" }
-tezos-codegen = { git = "https://gitlab.com/archaephyrryx/codec_generator", features = ["full"], branch = "external-runtime" }
+tezos-codegen = { git = "https://gitlab.com/archaephyrryx/codec_generator", features = [
+    "lima",
+    "kathmandu",
+], branch = "external-runtime" }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10.6"
 base58 = "0.2.0"
