@@ -1,6 +1,8 @@
 pub mod base58;
 
-use tedium::FixedBytes;
+use std::fmt::Display;
+
+use tedium::{FixedBytes, Decode};
 
 #[macro_export]
 macro_rules! boilerplate {
@@ -326,5 +328,84 @@ impl AsRef<i64> for Timestamp {
 impl std::borrow::Borrow<i64> for Timestamp {
     fn borrow(&self) -> &i64 {
         &self.0
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Mutez(i64);
+
+impl Decode for Mutez {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        Ok(i64::parse(p)?.into())
+    }
+}
+
+impl tedium::conv::len::FixedLength for Mutez {
+    const LEN: usize = <i64 as tedium::conv::len::FixedLength>::LEN;
+}
+
+impl Mutez {
+    pub const PRECISION : u64 = 1_000_000;
+
+    pub const fn to_i64(&self) -> i64 {
+        self.0
+    }
+
+    pub const fn from_i64(mutez: i64) -> Self {
+        Self(mutez)
+    }
+
+    /// Partitions a [`Mutez`] around the logical decimal point in its xtz value,
+    /// returning the signed number of tez followed by the unsigned mantissa.
+    pub const fn to_parts(&self) -> (i64, u64) {
+        let abs = self.0.unsigned_abs();
+        let mantissa = abs.rem_euclid(Self::PRECISION);
+        let radix = self.0.wrapping_div(Self::PRECISION as i64);
+        (radix, mantissa)
+    }
+
+    pub fn to_xtz_string(&self) -> String {
+        let (radix, mantissa) = self.to_parts();
+        format!("{radix}.{mantissa}")
+    }
+
+    pub fn to_tez_lossy(&self) -> f64 {
+        let val = self.0 as f64;
+        val / Self::PRECISION as f64
+    }
+}
+
+impl From<i64> for Mutez {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Add for Mutez {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::AddAssign for Mutez {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
+
+impl std::ops::Add<i64> for Mutez {
+    type Output = Self;
+
+    fn add(self, rhs: i64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Display for Mutez {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} μtz", self.0)
     }
 }
