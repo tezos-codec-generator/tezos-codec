@@ -2,7 +2,7 @@ pub mod base58;
 
 use std::fmt::Display;
 
-use tedium::{FixedBytes, Decode};
+use tedium::{ FixedBytes, Decode };
 
 #[macro_export]
 macro_rules! boilerplate {
@@ -167,10 +167,10 @@ impl ContextHash {
     /// Preimage of ciphertext prefix `Co`.
     ///
     /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX : [u8; 2] = [79, 199];
+    pub const BASE58_PREFIX: [u8; 2] = [79, 199];
 }
 impl StaticPrefix for ContextHash {
-    const PREFIX : &'static [u8] = &Self::BASE58_PREFIX;
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
 }
 impl Crypto for ContextHash {}
 
@@ -181,7 +181,7 @@ impl OperationListListHash {
     /// Preimage of ciphertext prefix `LLo`
     ///
     /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX : [u8; 3] = [29, 159, 109];
+    pub const BASE58_PREFIX: [u8; 3] = [29, 159, 109];
 }
 
 impl StaticPrefix for OperationListListHash {
@@ -189,12 +189,6 @@ impl StaticPrefix for OperationListListHash {
 }
 
 impl Crypto for OperationListListHash {}
-
-
-
-
-
-
 
 boilerplate!(ProtocolHash = 32);
 impl_crypto_display!(ProtocolHash);
@@ -304,7 +298,6 @@ impl Timestamp {
     pub const fn from_i64(i: i64) -> Self {
         Self(i)
     }
-
 }
 
 impl From<Timestamp> for i64 {
@@ -346,7 +339,7 @@ impl tedium::conv::len::FixedLength for Mutez {
 }
 
 impl Mutez {
-    pub const PRECISION : u64 = 1_000_000;
+    pub const PRECISION: u64 = 1_000_000;
 
     pub const fn to_i64(&self) -> i64 {
         self.0
@@ -365,14 +358,31 @@ impl Mutez {
         (radix, mantissa)
     }
 
+    /// Returns a string representation of the decimal value of this [`Mutez`] instance,
+    /// with an implicit unit of `tez`.
+    ///
+    /// The numeric formatting is done using the standard Display for integers, and so it will
+    /// not include any separators between digits. For more readable or otherwise more customizable
+    /// formatting, see [`format_parts`].
     pub fn to_xtz_string(&self) -> String {
         let (radix, mantissa) = self.to_parts();
         format!("{radix}.{mantissa}")
     }
 
+    /// Calls an arbitrary function that maps the radix and mantissa of a [`Mutez`] instance
+    /// into a formatted string.
+    ///
+    /// This function is provided as a convenience for end-users who want more control over
+    /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
+    /// traits implementations, or the [`to_xtz_string`] associated method.
+    pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(i64, u64) -> String {
+        let (radix, mantissa) = self.to_parts();
+        f(radix, mantissa)
+    }
+
     pub fn to_tez_lossy(&self) -> f64 {
         let val = self.0 as f64;
-        val / Self::PRECISION as f64
+        val / (Self::PRECISION as f64)
     }
 }
 
@@ -392,7 +402,7 @@ impl std::ops::Add for Mutez {
 
 impl std::ops::AddAssign for Mutez {
     fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
+        self.0 += rhs.0;
     }
 }
 
