@@ -451,3 +451,54 @@ impl From<RatioU16> for Ratio<u16> {
         value.0
     }
 }
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ProtocolHashPair {
+    protocol: ProtocolHash,
+    next_protocol: ProtocolHash,
+}
+
+impl std::fmt::Debug for ProtocolHashPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProtocolHashPair")
+            .field("protocol", &self.protocol.to_base58check())
+            .field("next_protocol", &self.next_protocol.to_base58check())
+            .finish()
+    }
+}
+
+impl ProtocolHashPair {
+    pub fn new(protocol: ProtocolHash, next_protocol: ProtocolHash) -> Self {
+        Self { protocol, next_protocol }
+    }
+
+    pub fn protocol(&self) -> ProtocolHash {
+        self.protocol
+    }
+
+    pub fn next_protocol(&self) -> ProtocolHash {
+        self.next_protocol
+    }
+
+    pub fn are_equal(&self) -> bool {
+        self.protocol == self.next_protocol
+    }
+
+    pub fn are_different(&self) -> bool {
+        self.protocol != self.next_protocol
+    }
+}
+
+impl tedium::Decode for ProtocolHashPair {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        let protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
+        let next_protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
+        Ok(Self { protocol, next_protocol })
+    }
+}
+
+impl Display for ProtocolHashPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ protocol: {}, next_protocol: {} }}", self.protocol, self.next_protocol)
+    }
+}
