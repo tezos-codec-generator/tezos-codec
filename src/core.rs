@@ -2,6 +2,7 @@ pub mod base58;
 
 use std::fmt::Display;
 
+use num::rational::Ratio;
 use tedium::{ FixedBytes, Decode };
 
 #[macro_export]
@@ -417,5 +418,36 @@ impl std::ops::Add<i64> for Mutez {
 impl Display for Mutez {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} μtz", self.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Hash)]
+/// Representation of a rational number as a numerator-denominator pair, both of which
+/// are [`u16`]. The actual implementation is based on the generic [`num::rational::Ratio`] type.
+pub struct RatioU16(Ratio<u16>);
+
+impl RatioU16 {
+    pub fn new(numer: u16, denom: u16) -> Self {
+        Self(Ratio::new(numer, denom))
+    }
+}
+
+impl std::ops::Deref for RatioU16 {
+    type Target = Ratio<u16>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Ratio<u16>> for RatioU16 {
+    fn from(value: Ratio<u16>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<RatioU16> for Ratio<u16> {
+    fn from(value: RatioU16) -> Self {
+        value.0
     }
 }
