@@ -17,6 +17,21 @@ pub trait BallotLike {
     fn to_tally(&self) -> crate::util::VoteStatistics;
 }
 
+pub trait ContainsProposals {
+    /// Specific type used to represent initial and upvoted proposals of
+    /// protocol hashes by delegate accounts during the Proposal period.
+    type ProposalsType;
+
+    /// Returns `true` if there is at least one proposals oepration contained within this object.
+    fn has_proposals(&self) -> bool;
+
+    /// Returns the cumulative number of proposals contained within this object.
+    fn count_proposals(&self) -> usize;
+
+    /// Returns a [`Vec`] containing all the proposals recursively contained within this object.
+    fn get_proposals(&self) -> Vec<Self::ProposalsType>;
+}
+
 pub trait ContainsBallots {
     /// Specific type used to represent the ballot operations that are
     /// possibly contained within values of [`Self`].

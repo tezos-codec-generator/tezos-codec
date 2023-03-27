@@ -105,11 +105,151 @@ pub mod api {
 
     use crate::{
         core::{ ProtocolHash, PublicKeyHashV0, BlockHash, ChainId, RatioU16 },
-        traits::{ ContainsBallots, Crypto, StaticPrefix },
+        traits::{ ContainsBallots, Crypto, StaticPrefix, ContainsProposals },
     };
 
     crate::boilerplate!(LimaBlockPayloadHash = 32);
     crate::impl_crypto_display!(LimaBlockPayloadHash);
+
+    /// Cross-module canonical type for Lima `block_info` values
+    #[derive(Clone, Debug, Hash, PartialEq)]
+    pub struct LimaBlockInfo {
+        chain_id: ChainId,
+        hash: BlockHash,
+        header: LimaBlockHeader,
+        metadata: Option<LimaMetadata>,
+        operations: Vec<Vec<LimaOperation>>,
+    }
+
+    impl tedium::Decode for LimaBlockInfo {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            let raw: raw::BlockInfo = raw::BlockInfo::parse(p)?;
+            Ok(raw.into())
+        }
+    }
+
+    fn unpack_block_operations(
+        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>
+    ) -> Vec<Vec<LimaOperation>> {
+        operations
+            .into_inner()
+            .into_iter()
+            .map(|ddx|
+                ddx
+                    .into_inner()
+                    .into_inner()
+                    .into_iter()
+                    .map(|op| op.into())
+                    .collect::<Vec<LimaOperation>>()
+            )
+            .collect()
+    }
+
+    impl From<raw::BlockInfo> for LimaBlockInfo {
+        fn from(value: raw::BlockInfo) -> Self {
+            Self {
+                chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
+                hash: BlockHash::from(value.hash.block_hash),
+                header: LimaBlockHeader::from(value.header.into_inner()),
+                metadata: value.metadata.map(|x| LimaMetadata::from(x.into_inner())),
+                operations: unpack_block_operations(value.operations),
+            }
+        }
+    }
+
+    impl ContainsProposals for LimaBlockInfo {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_proposals()))
+        }
+
+        fn count_proposals(&self) -> usize {
+            todo!()
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            todo!()
+        }
+    }
+
+    impl ContainsBallots for LimaBlockInfo {
+        type BallotType = LimaBallot;
+
+        fn has_ballots(&self) -> bool {
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
+        }
+
+        fn count_ballots(&self) -> usize {
+            self.operations
+                .iter()
+                .fold(0usize, |major, ops| {
+                    ops.iter().fold(major, |minor, op| { minor + op.count_ballots() })
+                })
+        }
+
+        fn get_ballots(&self) -> Vec<Self::BallotType> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
+                .collect()
+        }
+    }
+
+    impl LimaBlockInfo {
+        /// Returns a [Vec] containing every [LimaBallot] operation included in this [LimaBlockInfo].
+        pub fn get_all_ballots(&self) -> Vec<LimaBallot> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
+                .collect()
+        }
+
+        /// Returns a [Vec] containing every [LimaProposals] operation included in this [LimaBlockInfo].
+        pub fn get_all_proposals(&self) -> Vec<LimaProposals> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_proposals()))
+                .collect()
+        }
+    }
+
+    impl LimaBlockInfo {
+        /// Returns the (optional) `metadata` field associated with this [`LimaBlockInfo`].
+        pub fn metadata(&self) -> &Option<LimaMetadata> {
+            &self.metadata
+        }
+
+        /// Returns a mutable reference to the `metadata` field of this [`LimaBlockInfo`].
+        pub fn metadata_mut(&mut self) -> &mut Option<LimaMetadata> {
+            &mut self.metadata
+        }
+
+        /// Returns a reference to the `operations` field of this [`LimaBlockInfo`].
+        pub fn operations(&self) -> &Vec<Vec<LimaOperation>> {
+            &self.operations
+        }
+
+        /// Returns a mutable reference to the `operations` field of this [`LimaBlockInfo`].
+        pub fn operations_mut(&mut self) -> &mut Vec<Vec<LimaOperation>> {
+            &mut self.operations
+        }
+
+        /// Returns a reference to the [ChainId] associated with this [`LimaBlockInfo`].
+        pub fn chain_id(&self) -> &ChainId {
+            &self.chain_id
+        }
+
+        /// Returns a reference to the [BlockHash] associated with this [`LimaBlockInfo`].
+        pub fn hash(&self) -> &BlockHash {
+            &self.hash
+        }
+
+        /// Returns a reference to the `header` field of this [`LimaBlockInfo`]
+        pub fn header(&self) -> &LimaBlockHeader {
+            &self.header
+        }
+    }
 
     impl LimaBlockPayloadHash {
         /// Preimage bytes for ciphertext prefix `vh`.
@@ -218,123 +358,6 @@ pub mod api {
             self.branch
         }
     }
-
-    /// Cross-module canonical type for Lima `block_info` values
-    #[derive(Clone, Debug, Hash, PartialEq)]
-    pub struct LimaBlockInfo {
-        chain_id: ChainId,
-        hash: BlockHash,
-        header: LimaBlockHeader,
-        metadata: Option<LimaMetadata>,
-        operations: Vec<Vec<LimaOperation>>,
-    }
-
-    impl tedium::Decode for LimaBlockInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
-            let raw: raw::BlockInfo = raw::BlockInfo::parse(p)?;
-            Ok(raw.into())
-        }
-    }
-
-    fn unpack_block_operations(
-        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>
-    ) -> Vec<Vec<LimaOperation>> {
-        operations
-            .into_inner()
-            .into_iter()
-            .map(|ddx|
-                ddx
-                    .into_inner()
-                    .into_inner()
-                    .into_iter()
-                    .map(|op| op.into())
-                    .collect::<Vec<LimaOperation>>()
-            )
-            .collect()
-    }
-
-    impl From<raw::BlockInfo> for LimaBlockInfo {
-        fn from(value: raw::BlockInfo) -> Self {
-            Self {
-                chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
-                hash: BlockHash::from(value.hash.block_hash),
-                header: LimaBlockHeader::from(value.header.into_inner()),
-                metadata: value.metadata.map(|x| LimaMetadata::from(x.into_inner())),
-                operations: unpack_block_operations(value.operations),
-            }
-        }
-    }
-
-    impl ContainsBallots for LimaBlockInfo {
-        type BallotType = LimaBallot;
-
-        fn has_ballots(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
-        }
-
-        fn count_ballots(&self) -> usize {
-            self.operations
-                .iter()
-                .fold(0usize, |major, ops| {
-                    ops.iter().fold(major, |minor, op| { minor + op.count_ballots() })
-                })
-        }
-
-        fn get_ballots(&self) -> Vec<Self::BallotType> {
-            self.operations
-                .iter()
-                .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
-                .collect()
-        }
-    }
-
-    impl LimaBlockInfo {
-        /// Returns a [Vec] containing every [LimaBallot] operation included in this [LimaBlockInfo].
-        pub fn get_all_ballots(&self) -> Vec<LimaBallot> {
-            self.operations
-                .iter()
-                .flat_map(|v| v.iter().flat_map(|op| op.get_ballots()))
-                .collect()
-        }
-    }
-
-    impl LimaBlockInfo {
-        /// Returns the (optional) `metadata` field associated with this [`LimaBlockInfo`].
-        pub fn metadata(&self) -> &Option<LimaMetadata> {
-            &self.metadata
-        }
-
-        /// Returns a mutable reference to the `metadata` field of this [`LimaBlockInfo`].
-        pub fn metadata_mut(&mut self) -> &mut Option<LimaMetadata> {
-            &mut self.metadata
-        }
-
-        /// Returns a reference to the `operations` field of this [`LimaBlockInfo`].
-        pub fn operations(&self) -> &Vec<Vec<LimaOperation>> {
-            &self.operations
-        }
-
-        /// Returns a mutable reference to the `operations` field of this [`LimaBlockInfo`].
-        pub fn operations_mut(&mut self) -> &mut Vec<Vec<LimaOperation>> {
-            &mut self.operations
-        }
-
-        /// Returns a reference to the [ChainId] associated with this [`LimaBlockInfo`].
-        pub fn chain_id(&self) -> &ChainId {
-            &self.chain_id
-        }
-
-        /// Returns a reference to the [BlockHash] associated with this [`LimaBlockInfo`].
-        pub fn hash(&self) -> &BlockHash {
-            &self.hash
-        }
-
-        /// Returns a reference to the `header` field of this [`LimaBlockInfo`]
-        pub fn header(&self) -> &LimaBlockHeader {
-            &self.header
-        }
-    }
-
     /// Outermost type used to represent operation-data within a [`LimaBlockInfo`] object.
     ///
     /// Primarily contains a value of type [`LimaOperationPayload`], along with a [`ChainId`]
@@ -353,6 +376,58 @@ pub mod api {
                 hash: crate::core::OperationHash::from_fixed_bytes(value.hash.operation_hash),
                 operation: LimaOperationPayload::from(value.operation_rhs),
             }
+        }
+    }
+
+    impl ContainsProposals for LimaOperation {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            self.operation.has_proposals()
+        }
+
+        fn count_proposals(&self) -> usize {
+            self.operation.count_proposals()
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            self.operation.get_proposals()
+        }
+    }
+
+    #[cfg(test)]
+    fn mock_operation(contents: LimaOperationContents) -> LimaOperation {
+        LimaOperation {
+            chain_id: ChainId::from([0, 0, 0, 0]),
+            hash: crate::core::OperationHash::from(tedium::FixedBytes::<32>::from_array([0u8; 32])),
+            operation: LimaOperationPayload {
+                shell_header: LimaOperationShellHeader {
+                    branch: BlockHash::from_byte_array([0u8; 32]),
+                },
+                operation: LimaOperationContainer::WithoutMetadata {
+                    contents: vec![contents],
+                    signature: None,
+                },
+            },
+        }
+    }
+
+    #[cfg(test)]
+    mod limaoperation_containsproposals_tests {
+        use tedium::FixedBytes;
+
+        use super::*;
+
+        #[test]
+        fn test_has_proposals() {
+            let should_have = mock_operation(
+                LimaOperationContents::Proposals(LimaProposals {
+                    source: PublicKeyHashV0::Ed25519(FixedBytes::from_array([0u8; 20])),
+                    period: 12,
+                    proposals: vec![crate::core::ProtocolHash::from_byte_array([0u8; 32])],
+                })
+            );
+            assert!(should_have.has_proposals());
         }
     }
 
@@ -375,6 +450,22 @@ pub mod api {
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             self.operation.get_ballots()
+        }
+    }
+
+    impl ContainsProposals for LimaOperationPayload {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            self.operation.has_proposals()
+        }
+
+        fn count_proposals(&self) -> usize {
+            self.operation.count_proposals()
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            self.operation.get_proposals()
         }
     }
 
@@ -430,10 +521,111 @@ pub mod api {
         }
     }
 
+    impl ContainsProposals for LimaOperationContainer {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().any(ContainsProposals::has_proposals),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().any(ContainsProposals::has_proposals),
+            }
+        }
+
+        fn count_proposals(&self) -> usize {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().map(ContainsProposals::count_proposals).sum(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().map(ContainsProposals::count_proposals).sum(),
+            }
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
+            }
+        }
+    }
+
+    pub type LimaRawProposals =
+        super::raw::block_info::proto015ptlimaptoperationalphacontents::Proposals;
+
+    pub type LimaRawProposalsAndResult =
+        super::raw::block_info::proto015ptlimaptoperationalphaoperationcontentsandresult::Proposals;
+
+    #[derive(Clone, Debug, Hash, PartialEq)]
+    pub struct LimaProposals {
+        source: crate::core::PublicKeyHashV0,
+        period: i32,
+        proposals: Vec<ProtocolHash>,
+    }
+
+    impl std::fmt::Display for LimaProposals {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Account `")?;
+            self.source.base58check_fmt(f)?;
+            writeln!(f, "` proposed the following protocols during period {}:", self.period)?;
+            for proposal in self.proposals.iter() {
+                writeln!(f, "\t")?;
+                proposal.base58check_fmt(f)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl LimaProposals {
+        pub fn source(&self) -> PublicKeyHashV0 {
+            self.source
+        }
+
+        pub fn period(&self) -> i32 {
+            self.period
+        }
+
+        pub fn proposals(&self) -> &[ProtocolHash] {
+            self.proposals.as_ref()
+        }
+    }
+
+    impl From<LimaRawProposals> for LimaProposals {
+        fn from(value: LimaRawProposals) -> Self {
+            Self {
+                source: value.source.signature_v0_public_key_hash.into(),
+                period: value.period,
+                proposals: value.proposals
+                    .into_inner()
+                    .into_iter()
+                    .map(|proposal| proposal.protocol_hash.into())
+                    .collect(),
+            }
+        }
+    }
+
+    impl From<LimaRawProposalsAndResult> for LimaProposals {
+        fn from(value: LimaRawProposalsAndResult) -> Self {
+            Self {
+                source: value.source.signature_v0_public_key_hash.into(),
+                period: value.period,
+                proposals: value.proposals
+                    .into_inner()
+                    .into_iter()
+                    .map(|proposal| proposal.protocol_hash.into())
+                    .collect(),
+            }
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq, Hash)]
     #[non_exhaustive]
+    /// TODO - include distinction of Proposals operation
     pub enum LimaOperationContents {
         Ballot(LimaBallot),
+        Proposals(LimaProposals),
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaContents),
     }
 
@@ -447,6 +639,9 @@ pub mod api {
                         )
                     )
                 }
+                Proto015PtLimaPtOperationAlphaContents::Proposals(proposals) => {
+                    Self::Proposals(LimaProposals::from(proposals))
+                }
                 _other => Self::Raw(_other),
             }
         }
@@ -456,6 +651,7 @@ pub mod api {
     #[non_exhaustive]
     pub enum LimaOperationContentsAndResult {
         Ballot(LimaBallot),
+        Proposals(LimaProposals),
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResult),
     }
 
@@ -469,7 +665,32 @@ pub mod api {
                         )
                     )
                 }
+                Proto015PtLimaPtOperationAlphaOperationContentsAndResult::Proposals(proposals) => {
+                    Self::Proposals(LimaProposals::from(proposals))
+                }
                 other => Self::Raw(other),
+            }
+        }
+    }
+
+    impl ContainsProposals for LimaOperationContentsAndResult {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            matches!(self, &LimaOperationContentsAndResult::Proposals(_))
+        }
+
+        fn count_proposals(&self) -> usize {
+            match self {
+                LimaOperationContentsAndResult::Proposals(_) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            match self {
+                LimaOperationContentsAndResult::Proposals(ret) => vec![ret.clone()],
+                _ => Vec::new(),
             }
         }
     }
@@ -484,14 +705,14 @@ pub mod api {
         fn count_ballots(&self) -> usize {
             match self {
                 LimaOperationContentsAndResult::Ballot(_) => 1,
-                LimaOperationContentsAndResult::Raw(_) => 0,
+                _ => 0,
             }
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
                 &LimaOperationContentsAndResult::Ballot(ret) => vec![ret],
-                LimaOperationContentsAndResult::Raw(_) => Vec::new(),
+                _ => Vec::new(),
             }
         }
     }
@@ -786,7 +1007,7 @@ pub mod api {
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
                 &LimaOperationContents::Ballot(ballot) => vec![ballot],
-                LimaOperationContents::Raw(_) => Vec::new(),
+                _ => Vec::new(),
             }
         }
 
@@ -797,7 +1018,29 @@ pub mod api {
         fn count_ballots(&self) -> usize {
             match self {
                 LimaOperationContents::Ballot(_) => 1,
-                LimaOperationContents::Raw(_) => 0,
+                _ => 0,
+            }
+        }
+    }
+
+    impl ContainsProposals for LimaOperationContents {
+        type ProposalsType = LimaProposals;
+
+        fn has_proposals(&self) -> bool {
+            matches!(self, Self::Proposals(_))
+        }
+
+        fn count_proposals(&self) -> usize {
+            match self {
+                LimaOperationContents::Proposals(_) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_proposals(&self) -> Vec<Self::ProposalsType> {
+            match self {
+                LimaOperationContents::Proposals(ret) => vec![ret.clone()],
+                _ => Vec::new(),
             }
         }
     }
