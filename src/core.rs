@@ -1,4 +1,5 @@
 pub mod base58;
+pub mod rpc;
 
 use std::fmt::Display;
 
@@ -36,7 +37,7 @@ macro_rules! boilerplate {
     };
     ($($tname:ident = $n:literal),+ $(,)?) => {
         $(
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, tedium::Decode)]
             pub struct $tname(::tedium::FixedBytes<$n>);
 
             impl $crate::traits::AsPayload for $tname {
@@ -225,6 +226,19 @@ pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
     Secp256k1(FixedBytes<20>),
     P256(FixedBytes<20>),
+}
+
+impl tedium::Decode for PublicKeyHashV0 {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
+        let payload = FixedBytes::<20>::parse(p)?;
+        Ok(match tag {
+            0 => Self::Ed25519(payload),
+            1 => Self::Secp256k1(payload),
+            2 => Self::P256(payload),
+            _ => unreachable!()
+        })
+    }
 }
 
 boilerplate!(@refonly PublicKeyHashV0 = 20);
@@ -449,56 +463,5 @@ impl From<Ratio<u16>> for RatioU16 {
 impl From<RatioU16> for Ratio<u16> {
     fn from(value: RatioU16) -> Self {
         value.0
-    }
-}
-
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub struct ProtocolHashPair {
-    protocol: ProtocolHash,
-    next_protocol: ProtocolHash,
-}
-
-impl std::fmt::Debug for ProtocolHashPair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProtocolHashPair")
-            .field("protocol", &self.protocol.to_base58check())
-            .field("next_protocol", &self.next_protocol.to_base58check())
-            .finish()
-    }
-}
-
-impl ProtocolHashPair {
-    pub fn new(protocol: ProtocolHash, next_protocol: ProtocolHash) -> Self {
-        Self { protocol, next_protocol }
-    }
-
-    pub fn protocol(&self) -> ProtocolHash {
-        self.protocol
-    }
-
-    pub fn next_protocol(&self) -> ProtocolHash {
-        self.next_protocol
-    }
-
-    pub fn are_equal(&self) -> bool {
-        self.protocol == self.next_protocol
-    }
-
-    pub fn are_different(&self) -> bool {
-        self.protocol != self.next_protocol
-    }
-}
-
-impl tedium::Decode for ProtocolHashPair {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
-        let protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
-        let next_protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
-        Ok(Self { protocol, next_protocol })
-    }
-}
-
-impl Display for ProtocolHashPair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ protocol: {}, next_protocol: {} }}", self.protocol, self.next_protocol)
     }
 }
