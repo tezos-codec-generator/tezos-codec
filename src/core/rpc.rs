@@ -91,26 +91,17 @@ pub mod proposals {
         /// for scenarios in which an in-memory [`ProposalMap`] is not necessary; a parse is performed
         /// incrementally and only a single key is interrogated, whose raw pair-element is returned without
         /// any in-memory construction of a proper [`ProposalMap`].
-        pub fn transient_lookup<P: tedium::Parser>(
+        pub fn transient_lookup<P: tedium::parse::ParserExt>(
             p: &mut P,
             key: &ProtocolHash
         ) -> tedium::ParseResult<Option<i64>> {
-            let mut ret = None;
-            let _lp: tedium::u30 = tedium::u30::parse(p)?;
-            p.set_fit(_lp.into())?;
-            while p.remainder() > 0 {
-                let _key = p.take_fixed::<32>()?;
-                if key.as_array_ref() != &_key {
-                    let _ = p.take_fixed::<8>();
-                    continue;
-                } else {
-                    let value = i64::parse(p)?;
-                    let _ = ret.replace(value);
-                    break;
-                }
-            }
-            Ok(ret)
+            let _pl = p.process_prefix::<tedium::u30>()?;
+            p.fast_kv_search::<ProtocolHash, i64, _, 32, 8>(
+                key.as_array_ref(),
+                i64::from_be_bytes
+            )
         }
+
         pub fn contains<K>(&self, k: K) -> bool where K: Borrow<[u8; 32]> {
             let key = ProtocolHash::from(k.borrow());
             self.table.contains_key(&key)
@@ -156,35 +147,17 @@ pub mod listings {
         /// for scenarios in which an in-memory [`ListingMap`] is not necessary; a parse is performed
         /// incrementally and only a single key is interrogated, whose raw paired-value is returned without
         /// any in-memory construction of a proper [`ListingMap`].
-        pub fn transient_lookup<P: tedium::Parser>(
+        pub fn transient_lookup<P: tedium::parse::ParserExt>(
             p: &mut P,
             key: &PublicKeyHashV0
         ) -> tedium::ParseResult<Option<Mutez>> {
-            let mut ret = None;
-            let _lp: tedium::u30 = tedium::u30::parse(p)?;
-            p.set_fit(_lp.into())?;
-            while p.remainder() > 0 {
-                let headword = p.take_u8()?;
-                match (headword, key) {
-                    | (0, &PublicKeyHashV0::Ed25519(payload))
-                    | (1, &PublicKeyHashV0::Secp256k1(payload))
-                    | (2, &PublicKeyHashV0::P256(payload)) => {
-                        let _payload = p.take_fixed::<20>()?;
-                        if _payload != payload.to_array() {
-                            let _ = p.take_fixed::<8>()?;
-                            continue;
-                        } else {
-                            let value = Mutez::parse(p)?;
-                            let _ = ret.replace(value);
-                            break;
-                        }
-                    }
-                    _ => {
-                        let _ = p.take_fixed::<28>()?;
-                    }
-                }
-            }
-            Ok(ret)
+            let _pl = p.process_prefix::<tedium::u30>()?;
+            let raw_key = key.to_discriminated_bytes();
+            let key_array = raw_key.try_into().unwrap_or_else(|_| unreachable!());
+            p.fast_kv_search::<PublicKeyHashV0, Mutez, _, 21, 8>(
+                &key_array,
+                |arr| i64::from_be_bytes(arr).into()
+            )
         }
 
         pub fn contains<K>(&self, k: K) -> bool where PublicKeyHashV0: From<K> {

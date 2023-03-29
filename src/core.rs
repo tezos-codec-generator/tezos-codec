@@ -221,11 +221,39 @@ impl StaticPrefix for SignatureV0 {
 
 impl Crypto for SignatureV0 {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
     Secp256k1(FixedBytes<20>),
     P256(FixedBytes<20>),
+}
+
+impl PublicKeyHashV0 {
+    /// Returns the discriminant value from which a given variant would be deserialized,
+    /// regardless of what discriminant value the Rust compiler assigns that variant.
+    pub const fn virtual_discriminant(&self) -> u8 {
+        match self {
+            PublicKeyHashV0::Ed25519(_) => 0,
+            PublicKeyHashV0::Secp256k1(_) => 1,
+            PublicKeyHashV0::P256(_) => 2,
+        }
+    }
+
+    /// Returns the full serialization-equivalent value of a [`PublicKeyHashV0`], primarily for
+    /// purposes of raw memory comparison operations such as [`tedium::parse::ParserExt::fast_kv_search`].
+    pub fn to_discriminated_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::with_capacity(21);
+        v.push(self.virtual_discriminant());
+        v.extend_from_slice(self.as_array_ref());
+        v
+    }
+}
+
+
+impl std::hash::Hash for PublicKeyHashV0 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.to_discriminated_bytes().hash(state);
+    }
 }
 
 impl tedium::Decode for PublicKeyHashV0 {
