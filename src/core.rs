@@ -493,3 +493,49 @@ impl From<RatioU16> for Ratio<u16> {
         value.0
     }
 }
+
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VotingPeriodKind {
+    Proposal = 0,
+    Exploration = 1,
+    Cooldown = 2,
+    Promotion  = 3,
+    Adoption = 4,
+}
+
+impl std::fmt::Display for VotingPeriodKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VotingPeriodKind::Proposal => write!(f, "Proposal"),
+            VotingPeriodKind::Exploration => write!(f, "Exploration"),
+            VotingPeriodKind::Cooldown => write!(f, "Cooldown"),
+            VotingPeriodKind::Promotion => write!(f, "Promotion"),
+            VotingPeriodKind::Adoption => write!(f, "Adoption"),
+        }
+    }
+}
+
+impl VotingPeriodKind {
+    pub const unsafe fn from_u8_unchecked(raw: u8) -> Self {
+        std::mem::transmute::<u8, Self>(raw)
+    }
+
+    pub fn from_u8(raw: u8) -> Self {
+        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
+        unsafe { Self::from_u8_unchecked(raw ) }
+    }
+
+    pub fn next(self) -> Self {
+        let raw = self as u8;
+        let next_raw = (raw + 1) % 5;
+        unsafe { Self::from_u8_unchecked(next_raw) }
+    }
+
+    pub fn prev(self) -> Self {
+        let raw = self as u8;
+        let prev_raw = (raw + 4) % 5;
+        unsafe { Self::from_u8_unchecked(prev_raw) }
+    }
+}
