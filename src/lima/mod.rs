@@ -346,6 +346,14 @@ pub mod api {
         remaining: i32,
     }
 
+    impl tedium::Decode for LimaVotingPeriodInfo {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            let raw = raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(p)?;
+            Ok(raw.into())
+        }
+    }
+
+
     impl LimaVotingPeriodInfo {
         pub fn voting_period(&self) -> LimaVotingPeriod {
             self.voting_period
@@ -391,6 +399,8 @@ pub mod api {
         kind: VotingPeriodKind,
         start_position: i32,
     }
+
+
 
     impl LimaVotingPeriod {
         pub fn index(&self) -> i32 {
