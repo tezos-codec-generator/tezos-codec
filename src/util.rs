@@ -18,7 +18,7 @@ impl std::ops::Add for VoteStatistics {
 }
 
 impl std::ops::AddAssign for VoteStatistics {
-    fn add_assign(&mut self, other: VoteStatistics) -> () {
+    fn add_assign(&mut self, other: VoteStatistics) {
         self.yay_count += other.yay_count;
         self.nay_count += other.nay_count;
         self.pass_count += other.pass_count;

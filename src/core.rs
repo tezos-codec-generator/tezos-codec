@@ -1,4 +1,5 @@
 pub mod base58;
+pub mod rpc;
 
 use std::fmt::Display;
 
@@ -36,7 +37,7 @@ macro_rules! boilerplate {
     };
     ($($tname:ident = $n:literal),+ $(,)?) => {
         $(
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, tedium::Decode, Serialize)]
             pub struct $tname(::tedium::FixedBytes<$n>);
 
             impl $crate::traits::AsPayload for $tname {
@@ -220,11 +221,52 @@ impl StaticPrefix for SignatureV0 {
 
 impl Crypto for SignatureV0 {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
     Secp256k1(FixedBytes<20>),
     P256(FixedBytes<20>),
+}
+
+impl PublicKeyHashV0 {
+    /// Returns the discriminant value from which a given variant would be deserialized,
+    /// regardless of what discriminant value the Rust compiler assigns that variant.
+    pub const fn virtual_discriminant(&self) -> u8 {
+        match self {
+            PublicKeyHashV0::Ed25519(_) => 0,
+            PublicKeyHashV0::Secp256k1(_) => 1,
+            PublicKeyHashV0::P256(_) => 2,
+        }
+    }
+
+    /// Returns the full serialization-equivalent value of a [`PublicKeyHashV0`], primarily for
+    /// purposes of raw memory comparison operations such as [`tedium::parse::ParserExt::fast_kv_search`].
+    pub fn to_discriminated_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::with_capacity(21);
+        v.push(self.virtual_discriminant());
+        v.extend_from_slice(self.as_array_ref());
+        v
+    }
+}
+
+
+impl std::hash::Hash for PublicKeyHashV0 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.to_discriminated_bytes().hash(state);
+    }
+}
+
+impl tedium::Decode for PublicKeyHashV0 {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
+        let payload = FixedBytes::<20>::parse(p)?;
+        Ok(match tag {
+            0 => Self::Ed25519(payload),
+            1 => Self::Secp256k1(payload),
+            2 => Self::P256(payload),
+            _ => unreachable!()
+        })
+    }
 }
 
 impl PublicKeyHashV0 {
@@ -486,53 +528,48 @@ impl From<RatioU16> for Ratio<u16> {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub struct ProtocolHashPair {
-    protocol: ProtocolHash,
-    next_protocol: ProtocolHash,
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VotingPeriodKind {
+    Proposal = 0,
+    Exploration = 1,
+    Cooldown = 2,
+    Promotion  = 3,
+    Adoption = 4,
 }
 
-impl std::fmt::Debug for ProtocolHashPair {
+impl std::fmt::Display for VotingPeriodKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProtocolHashPair")
-            .field("protocol", &self.protocol.to_base58check())
-            .field("next_protocol", &self.next_protocol.to_base58check())
-            .finish()
+        match self {
+            VotingPeriodKind::Proposal => write!(f, "Proposal"),
+            VotingPeriodKind::Exploration => write!(f, "Exploration"),
+            VotingPeriodKind::Cooldown => write!(f, "Cooldown"),
+            VotingPeriodKind::Promotion => write!(f, "Promotion"),
+            VotingPeriodKind::Adoption => write!(f, "Adoption"),
+        }
     }
 }
 
-impl ProtocolHashPair {
-    pub fn new(protocol: ProtocolHash, next_protocol: ProtocolHash) -> Self {
-        Self { protocol, next_protocol }
+impl VotingPeriodKind {
+    pub const unsafe fn from_u8_unchecked(raw: u8) -> Self {
+        std::mem::transmute::<u8, Self>(raw)
     }
 
-    pub fn protocol(&self) -> ProtocolHash {
-        self.protocol
+    pub fn from_u8(raw: u8) -> Self {
+        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
+        unsafe { Self::from_u8_unchecked(raw ) }
     }
 
-    pub fn next_protocol(&self) -> ProtocolHash {
-        self.next_protocol
+    pub fn next(self) -> Self {
+        let raw = self as u8;
+        let next_raw = (raw + 1) % 5;
+        unsafe { Self::from_u8_unchecked(next_raw) }
     }
 
-    pub fn are_equal(&self) -> bool {
-        self.protocol == self.next_protocol
-    }
-
-    pub fn are_different(&self) -> bool {
-        self.protocol != self.next_protocol
-    }
-}
-
-impl tedium::Decode for ProtocolHashPair {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
-        let protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
-        let next_protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
-        Ok(Self { protocol, next_protocol })
-    }
-}
-
-impl Display for ProtocolHashPair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ protocol: {}, next_protocol: {} }}", self.protocol, self.next_protocol)
+    pub fn prev(self) -> Self {
+        let raw = self as u8;
+        let prev_raw = (raw + 4) % 5;
+        unsafe { Self::from_u8_unchecked(prev_raw) }
     }
 }

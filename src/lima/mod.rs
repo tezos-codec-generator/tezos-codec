@@ -100,11 +100,12 @@ pub mod api {
             Proto015PtLimaPtOperationAlphaOperationWithMetadata,
             Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
             OperationDenestDyn,
+            Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
         },
     };
 
     use crate::{
-        core::{ ProtocolHash, PublicKeyHashV0, BlockHash, ChainId, RatioU16 },
+        core::{ ProtocolHash, PublicKeyHashV0, BlockHash, ChainId, RatioU16, VotingPeriodKind },
         traits::{ ContainsBallots, Crypto, StaticPrefix, ContainsProposals },
     };
 
@@ -336,7 +337,193 @@ pub mod api {
         }
     }
 
-    pub type LimaMetadata = raw::BlockHeaderMetadata;
+    pub type LimaLevelInfo = raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataLevelInfo;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct LimaVotingPeriodInfo {
+        voting_period: LimaVotingPeriod,
+        position: i32,
+        remaining: i32,
+    }
+
+    impl tedium::Decode for LimaVotingPeriodInfo {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            let raw = raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(p)?;
+            Ok(raw.into())
+        }
+    }
+
+
+    impl LimaVotingPeriodInfo {
+        pub fn voting_period(&self) -> LimaVotingPeriod {
+            self.voting_period
+        }
+
+        pub fn position(&self) -> i32 {
+            self.position
+        }
+
+        pub fn remaining(&self) -> i32 {
+            self.remaining
+        }
+    }
+
+    impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo>
+    for LimaVotingPeriodInfo {
+        fn from(
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo
+        ) -> Self {
+            Self {
+                voting_period: value.voting_period.into(),
+                position: value.position,
+                remaining: value.remaining,
+            }
+        }
+    }
+
+    impl std::fmt::Display for LimaVotingPeriodInfo {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "{{ voting_period: {}, position: {}, remaining: {} }}",
+                self.voting_period,
+                self.position,
+                self.remaining
+            )
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct LimaVotingPeriod {
+        index: i32,
+        kind: VotingPeriodKind,
+        start_position: i32,
+    }
+
+
+
+    impl LimaVotingPeriod {
+        pub fn index(&self) -> i32 {
+            self.index
+        }
+
+        pub fn kind(&self) -> VotingPeriodKind {
+            self.kind
+        }
+
+        pub fn start_position(&self) -> i32 {
+            self.start_position
+        }
+    }
+
+    impl std::fmt::Display for LimaVotingPeriod {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "{{ index: {}, kind: {}, start_position: {} }}",
+                self.index,
+                self.kind,
+                self.start_position
+            )
+        }
+    }
+
+    pub type RawVotingPeriodKind =
+        raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriodKind;
+
+    impl From<RawVotingPeriodKind> for crate::core::VotingPeriodKind {
+        fn from(value: RawVotingPeriodKind) -> Self {
+            let raw = value.get_tagval();
+            unsafe { Self::from_u8_unchecked(raw) }
+        }
+    }
+
+    impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod>
+    for LimaVotingPeriod {
+        fn from(
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod
+        ) -> Self {
+            Self {
+                index: value.index,
+                kind: value.kind.into(),
+                start_position: value.start_position,
+            }
+        }
+    }
+
+    pub type LimaTestChainStatus = raw::block_info::TestChainStatus;
+
+    #[derive(Clone, Debug, PartialEq, Hash)]
+    pub struct LimaMetadata {
+        test_chain_status: LimaTestChainStatus,
+        max_operations_ttl: i32,
+        max_operation_data_length: i32,
+        max_block_header_length: i32,
+        max_operation_list_length: Vec<raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq>,
+        proposer: PublicKeyHashV0,
+        baker: PublicKeyHashV0,
+        level_info: LimaLevelInfo,
+        voting_period_info: LimaVotingPeriodInfo,
+        nonce_hash: Option<LimaNonceHash>,
+        deactivated: Vec<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq>,
+        balance_updates: Vec<raw::block_info::Proto015PtLimaPtOperationMetadataAlphaBalance>,
+        liquidity_baking_toggle_ema: i32,
+        implicit_operations_results: Vec<raw::block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult>,
+        proposer_consensus_key: PublicKeyHashV0,
+        baker_consensus_key: PublicKeyHashV0,
+        consumed_milligas: BigUint,
+        dal_slot_availability: Option<BigInt>,
+    }
+
+    impl LimaMetadata {
+        pub fn voting_period_info(&self) -> &LimaVotingPeriodInfo {
+            &self.voting_period_info
+        }
+    }
+
+    impl From<raw::BlockHeaderMetadata> for LimaMetadata {
+        fn from(value: raw::BlockHeaderMetadata) -> Self {
+            Self {
+                test_chain_status: value.test_chain_status,
+                max_operations_ttl: value.max_operations_ttl.to_i32(),
+                max_operation_data_length: value.max_operation_data_length.to_i32(),
+                max_block_header_length: value.max_block_header_length.to_i32(),
+                max_operation_list_length: Sequence::into_inner(
+                    value.max_operation_list_length.into_inner().into_inner()
+                ),
+                proposer: value.proposer.signature_v0_public_key_hash.into(),
+                baker: value.baker.signature_v0_public_key_hash.into(),
+                level_info: value.level_info.into(),
+                voting_period_info: value.voting_period_info.into(),
+                nonce_hash: unpack_metadata_nonce_hash(value.nonce_hash),
+                deactivated: value.deactivated.into_inner().into_inner(),
+                balance_updates: value.balance_updates.into_inner().into_inner(),
+                liquidity_baking_toggle_ema: value.liquidity_baking_toggle_ema,
+                implicit_operations_results: value.implicit_operations_results
+                    .into_inner()
+                    .into_inner(),
+                proposer_consensus_key: value.proposer_consensus_key.signature_v0_public_key_hash.into(),
+                baker_consensus_key: value.baker_consensus_key.signature_v0_public_key_hash.into(),
+                consumed_milligas: value.consumed_milligas.into_inner(),
+                dal_slot_availability: value.dal_slot_availability
+                    .into_inner()
+                    .map(tedium::Z::into_inner),
+            }
+        }
+    }
+
+    fn unpack_metadata_nonce_hash(
+        value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash
+    ) -> Option<LimaNonceHash> {
+        match value {
+            Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::None(_) => None,
+            Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::Some(
+                raw::block_info::proto015ptlimaptblockheaderalphametadatanoncehash::Some {
+                    cycle_nonce,
+                },
+            ) => Some(cycle_nonce.into()),
+        }
+    }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct LimaOperationShellHeader {
