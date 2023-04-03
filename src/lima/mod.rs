@@ -801,6 +801,16 @@ pub mod api {
         Pass = 2,
     }
 
+    impl serde::Serialize for Ballot {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+            if serializer.is_human_readable() {
+                serializer.serialize_str(self.to_string().as_str())
+            } else {
+                serializer.serialize_i8(*self as i8)
+            }
+        }
+    }
+
     impl Ballot {
         #[inline]
         /// Converts an [i8] to the corresponding Ballot value without
@@ -856,6 +866,7 @@ pub mod api {
     }
 
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    #[derive(Serialize)]
     pub struct LimaBallot {
         source: PublicKeyHashV0,
         period: i32,

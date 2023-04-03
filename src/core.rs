@@ -36,7 +36,7 @@ macro_rules! boilerplate {
     };
     ($($tname:ident = $n:literal),+ $(,)?) => {
         $(
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
             pub struct $tname(::tedium::FixedBytes<$n>);
 
             impl $crate::traits::AsPayload for $tname {
@@ -225,6 +225,40 @@ pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
     Secp256k1(FixedBytes<20>),
     P256(FixedBytes<20>),
+}
+
+impl PublicKeyHashV0 {
+    pub(self) const fn variant_name(&self) -> &'static str {
+        match self {
+            PublicKeyHashV0::Ed25519(_) => "Ed25519",
+            PublicKeyHashV0::Secp256k1(_) => "Secp256k1",
+            PublicKeyHashV0::P256(_) => "P256",
+        }
+    }
+
+    pub(self) const fn variant_index(&self) -> u32 {
+        match self {
+            PublicKeyHashV0::Ed25519(_) => 0,
+            PublicKeyHashV0::Secp256k1(_) => 1,
+            PublicKeyHashV0::P256(_) => 2,
+        }
+    }
+}
+
+impl serde::Serialize for PublicKeyHashV0 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        if serializer.is_human_readable() {
+            let tmp: String = self.to_base58check();
+            serializer.serialize_str(tmp.as_str())
+        } else {
+            serializer.serialize_newtype_variant(
+                "PublicKeyHashV0",
+                self.variant_index(),
+                self.variant_name(),
+                self.as_payload()
+            )
+        }
+    }
 }
 
 boilerplate!(@refonly PublicKeyHashV0 = 20);

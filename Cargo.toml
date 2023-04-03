@@ -10,7 +10,7 @@ bench = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tezos-data-model = { git = "https://github.com/tezos-codec-generator/tezos-data-model" }
+tezos-data-model = { git = "https://github.com/tezos-codec-generator/tezos-data-model", features = ["serde_impls"] }
 tezos-codegen = { git = "https://gitlab.com/archaephyrryx/codec_generator", features = [
     "lima",
     "kathmandu",
