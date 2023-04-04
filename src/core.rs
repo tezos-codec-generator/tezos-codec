@@ -37,7 +37,7 @@ macro_rules! boilerplate {
     };
     ($($tname:ident = $n:literal),+ $(,)?) => {
         $(
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, tedium::Decode, Serialize)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, tedium::Decode)]
             pub struct $tname(::tedium::FixedBytes<$n>);
 
             impl $crate::traits::AsPayload for $tname {
@@ -113,10 +113,28 @@ macro_rules! boilerplate {
     };
 }
 
+macro_rules! impl_serde_crypto {
+    ( $( $tname:ident ),+ $(,)? ) => {
+        $(
+            impl serde::Serialize for $tname {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+                    if serializer.is_human_readable() {
+                        let tmp: String = self.to_base58check();
+                        serializer.serialize_str(tmp.as_str())
+                    } else {
+                        serializer.serialize_newtype_struct(stringify!($tname), &self.0)
+                    }
+                }
+            }
+        )+
+    };
+}
+
 use crate::{ traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix }, impl_crypto_display };
 
 boilerplate!(OperationHash = 32);
 impl_crypto_display!(OperationHash);
+impl_serde_crypto!(OperationHash);
 
 impl OperationHash {
     /// Preimage of ciphertext prefix `o`
@@ -133,6 +151,7 @@ impl Crypto for OperationHash {}
 
 boilerplate!(ChainId = 4);
 impl_crypto_display!(ChainId);
+impl_serde_crypto!(ChainId);
 
 impl ChainId {
     /// Preimage of ciphertext prefix `net`
@@ -149,6 +168,7 @@ impl Crypto for ChainId {}
 
 boilerplate!(BlockHash = 32);
 impl_crypto_display!(BlockHash);
+impl_serde_crypto!(BlockHash);
 
 impl BlockHash {
     /// Preimage of ciphertext prefix `B`
@@ -178,6 +198,7 @@ impl Crypto for ContextHash {}
 
 boilerplate!(OperationListListHash = 32);
 impl_crypto_display!(OperationListListHash);
+impl_serde_crypto!(OperationListListHash);
 
 impl OperationListListHash {
     /// Preimage of ciphertext prefix `LLo`
@@ -194,6 +215,7 @@ impl Crypto for OperationListListHash {}
 
 boilerplate!(ProtocolHash = 32);
 impl_crypto_display!(ProtocolHash);
+impl_serde_crypto!(ProtocolHash);
 
 impl ProtocolHash {
     /// Preimage of ciphertext prefix `P`.
@@ -210,6 +232,7 @@ impl Crypto for ProtocolHash {}
 
 boilerplate!(SignatureV0 = 64);
 impl_crypto_display!(SignatureV0);
+impl_serde_crypto!(SignatureV0);
 
 impl SignatureV0 {
     pub const BASE58_PREFIX: [u8; 3] = [4, 130, 43];
@@ -278,13 +301,6 @@ impl PublicKeyHashV0 {
         }
     }
 
-    pub(self) const fn variant_index(&self) -> u32 {
-        match self {
-            PublicKeyHashV0::Ed25519(_) => 0,
-            PublicKeyHashV0::Secp256k1(_) => 1,
-            PublicKeyHashV0::P256(_) => 2,
-        }
-    }
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
@@ -295,7 +311,7 @@ impl serde::Serialize for PublicKeyHashV0 {
         } else {
             serializer.serialize_newtype_variant(
                 "PublicKeyHashV0",
-                self.variant_index(),
+                self.virtual_discriminant() as u32,
                 self.variant_name(),
                 self.as_payload()
             )
@@ -305,6 +321,7 @@ impl serde::Serialize for PublicKeyHashV0 {
 
 boilerplate!(@refonly PublicKeyHashV0 = 20);
 impl_crypto_display!(PublicKeyHashV0);
+
 
 impl PublicKeyHashV0 {
     /// Preimage of ciphertext prefix `tz1`
@@ -402,7 +419,7 @@ impl std::borrow::Borrow<i64> for Timestamp {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct Mutez(i64);
 
 impl Decode for Mutez {
@@ -530,7 +547,7 @@ impl From<RatioU16> for Ratio<u16> {
 
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum VotingPeriodKind {
     Proposal = 0,
     Exploration = 1,
