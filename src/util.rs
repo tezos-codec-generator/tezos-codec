@@ -28,7 +28,11 @@ impl std::ops::AddAssign for VoteStatistics {
 impl VoteStatistics {
     /// Creates a new [`VoteStatistics`] based on the values of the three individual metrics.
     pub const fn new(yay_count: usize, nay_count: usize, pass_count: usize) -> Self {
-        Self { yay_count, nay_count, pass_count }
+        Self {
+            yay_count,
+            nay_count,
+            pass_count,
+        }
     }
 
     #[inline]

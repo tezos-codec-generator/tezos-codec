@@ -3,7 +3,7 @@ use tezos_codegen::proto016_ptmumbai::block_info;
 pub mod error {
     use std::convert::Infallible;
 
-    use crate::core::{ ballot::InvalidBallotError, InvalidSignatureV1ByteLengthError };
+    use crate::core::{ballot::InvalidBallotError, InvalidSignatureV1ByteLengthError};
 
     #[derive(Debug)]
     pub enum MumbaiConversionError {
@@ -42,8 +42,7 @@ pub mod error {
 
     impl From<Infallible> for MumbaiConversionError {
         fn from(value: Infallible) -> Self {
-            match value {
-            }
+            match value {}
         }
     }
 
@@ -62,7 +61,10 @@ pub mod error {
 
     impl std::fmt::Display for UnexpectedSignaturePrefixError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "found unexpected signature prefix in non-final position of contents-list")
+            write!(
+                f,
+                "found unexpected signature prefix in non-final position of contents-list"
+            )
         }
     }
 
@@ -130,20 +132,13 @@ pub mod raw {
 }
 
 pub mod api {
-    use tedium::{ Dynamic, Sequence, u30 };
     use super::raw::block_info;
+    use tedium::{u30, Dynamic, Sequence};
 
     use crate::{
         core::{
-            BlockHash,
-            ChainId,
-            NonceHash,
-            OperationHash,
-            InvalidSignatureV1ByteLengthError,
-            SignatureV1,
-            ProtocolHash,
-            PublicKeyHashV1,
-            ballot::InvalidBallotError,
+            ballot::InvalidBallotError, BlockHash, ChainId, InvalidSignatureV1ByteLengthError,
+            NonceHash, OperationHash, ProtocolHash, PublicKeyHashV1, SignatureV1,
         },
         traits::ContainsBallots,
     };
@@ -194,23 +189,23 @@ pub mod api {
         type BallotType = MumbaiBallot;
 
         fn has_ballots(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_ballots()))
         }
 
         fn count_ballots(&self) -> usize {
             self.operations
                 .iter()
-                .map(|ops|
-                    ops
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum::<usize>()
-                )
+                .map(|ops| ops.iter().map(|op| op.count_ballots()).sum::<usize>())
                 .sum()
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
-            self.operations.iter().flat_map(|ops| ops.iter().flat_map(|op| op.get_ballots())).collect()
+            self.operations
+                .iter()
+                .flat_map(|ops| ops.iter().flat_map(|op| op.get_ballots()))
+                .collect()
         }
     }
 
@@ -250,24 +245,25 @@ pub mod api {
                 timestamp: crate::core::Timestamp::from_i64(value.timestamp),
                 validation_pass: value.validation_pass,
                 operations_hash: crate::core::OperationListListHash::from_fixed_bytes(
-                    value.operations_hash.operation_list_list_hash
+                    value.operations_hash.operation_list_list_hash,
                 ),
-                fitness: value.fitness
+                fitness: value
+                    .fitness
                     .into_inner()
                     .into_iter()
                     .map(|elt| elt.into_inner())
                     .collect(),
                 context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
                 payload_hash: crate::core::ValueHash::from_fixed_bytes(
-                    value.payload_hash.value_hash
+                    value.payload_hash.value_hash,
                 ),
                 payload_round: value.payload_round,
                 proof_of_work_nonce: MumbaiProofOfWorkNonce::from_fixed_bytes(
-                    value.proof_of_work_nonce
+                    value.proof_of_work_nonce,
                 ),
-                seed_nonce_hash: value.seed_nonce_hash.map(|nonce|
-                    NonceHash::from_fixed_bytes(nonce.cycle_nonce)
-                ),
+                seed_nonce_hash: value
+                    .seed_nonce_hash
+                    .map(|nonce| NonceHash::from_fixed_bytes(nonce.cycle_nonce)),
                 liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
                 signature: crate::core::SignatureV1::try_from_bytes(value.signature.signature_v1)?,
             })
@@ -336,7 +332,9 @@ pub mod api {
 
     impl From<super::raw::block_info::OperationShellHeader> for MumbaiOperationShellHeader {
         fn from(value: super::raw::block_info::OperationShellHeader) -> Self {
-            Self { branch: BlockHash::from_fixed_bytes(value.branch.block_hash) }
+            Self {
+                branch: BlockHash::from_fixed_bytes(value.branch.block_hash),
+            }
         }
     }
 
@@ -357,22 +355,32 @@ pub mod api {
 
         fn has_ballots(&self) -> bool {
             match self {
-                Self::WithoutMetadata { contents, .. } => contents.iter().any(|op| op.has_ballots()),
+                Self::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(|op| op.has_ballots())
+                }
                 Self::WithMetadata { contents, .. } => contents.iter().any(|op| op.has_ballots()),
             }
         }
 
         fn count_ballots(&self) -> usize {
             match self {
-                Self::WithoutMetadata { contents, .. } => contents.iter().map(|op| op.count_ballots()).sum(),
-                Self::WithMetadata { contents, .. } => contents.iter().map(|op| op.count_ballots()).sum(),
+                Self::WithoutMetadata { contents, .. } => {
+                    contents.iter().map(|op| op.count_ballots()).sum()
+                }
+                Self::WithMetadata { contents, .. } => {
+                    contents.iter().map(|op| op.count_ballots()).sum()
+                }
             }
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
-                Self::WithoutMetadata { contents, .. } => contents.iter().flat_map(|op| op.get_ballots()).collect(),
-                Self::WithMetadata { contents, .. } => contents.iter().flat_map(|op| op.get_ballots()).collect(),
+                Self::WithoutMetadata { contents, .. } => {
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                }
+                Self::WithMetadata { contents, .. } => {
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                }
             }
         }
     }
@@ -385,12 +393,31 @@ pub mod api {
         ballot: crate::core::ballot::Ballot,
     }
 
+    impl MumbaiBallot {
+        pub fn source(&self) -> PublicKeyHashV1 {
+            self.source
+        }
+
+        pub fn period(&self) -> i32 {
+            self.period
+        }
+
+        pub fn proposal(&self) -> ProtocolHash {
+            self.proposal
+        }
+
+        pub fn ballot(&self) -> crate::core::ballot::Ballot {
+            self.ballot
+        }
+    }
+
     impl TryFrom<super::raw::block_info::proto016ptmumbaioperationalphacontents::Ballot>
-    for MumbaiBallot {
+        for MumbaiBallot
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::proto016ptmumbaioperationalphacontents::Ballot
+            value: super::raw::block_info::proto016ptmumbaioperationalphacontents::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: crate::core::PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -417,12 +444,15 @@ pub mod api {
         }
     }
 
-    impl TryFrom<super::raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot>
-    for MumbaiBallot {
+    impl
+        TryFrom<
+            super::raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot,
+        > for MumbaiBallot
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot
+            value: super::raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: crate::core::PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -456,21 +486,23 @@ pub mod api {
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
                 Self::Ballot(ballot) => vec![*ballot],
-                _ => vec![]
+                _ => vec![],
             }
         }
     }
 
     impl TryFrom<super::raw::block_info::Proto016PtMumbaiOperationAlphaContents>
-    for MumbaiOperationContents {
+        for MumbaiOperationContents
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::Proto016PtMumbaiOperationAlphaContents
+            value: super::raw::block_info::Proto016PtMumbaiOperationAlphaContents,
         ) -> Result<Self, Self::Error> {
             match value {
-                block_info::Proto016PtMumbaiOperationAlphaContents::Ballot(ballot) =>
-                    Ok(Self::Ballot(ballot.try_into()?)),
+                block_info::Proto016PtMumbaiOperationAlphaContents::Ballot(ballot) => {
+                    Ok(Self::Ballot(ballot.try_into()?))
+                }
                 other => Ok(Self::Raw(other)),
             }
         }
@@ -499,7 +531,7 @@ pub mod api {
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
                 Self::Ballot(ballot) => vec![*ballot],
-                _ => vec![]
+                _ => vec![],
             }
         }
     }
@@ -514,11 +546,12 @@ pub mod api {
     }
 
     impl TryFrom<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>
-    for MumbaiOperationContentsAndResult {
+        for MumbaiOperationContentsAndResult
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult
+            value: block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult,
         ) -> Result<Self, Self::Error> {
             match value {
                 block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult::Ballot(
@@ -532,8 +565,8 @@ pub mod api {
     fn unpack_operation_contents_and_result(
         contents: Dynamic<
             u30,
-            Sequence<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>
-        >
+            Sequence<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>,
+        >,
     ) -> Result<Vec<MumbaiOperationContentsAndResult>, InvalidBallotError> {
         contents
             .into_inner()
@@ -546,9 +579,9 @@ pub mod api {
         type Error = super::error::MumbaiConversionError;
 
         fn try_from(
-            value: super::raw::block_info::OperationDenestDyn
+            value: super::raw::block_info::OperationDenestDyn,
         ) -> Result<Self, Self::Error> {
-            use block_info::{ OperationDenestDyn::*, operationdenestdyn };
+            use block_info::{operationdenestdyn, OperationDenestDyn::*};
             match value {
                 Operation_with_too_large_metadata(
                     operationdenestdyn::Operation_with_too_large_metadata {
@@ -562,7 +595,9 @@ pub mod api {
                         )
                     {
                         Ok((contents, opt_sig_prefix)) => (contents, opt_sig_prefix),
-                        Err(e) => return Err(e),
+                        Err(e) => {
+                            return Err(e);
+                        }
                     };
                     let signature = content_filter::sigv1_from_parts(
                         opt_sig_prefix,
@@ -582,7 +617,9 @@ pub mod api {
                         )
                     {
                         Ok((contents, opt_sig_prefix)) => (contents, opt_sig_prefix),
-                        Err(e) => return Err(e),
+                        Err(e) => {
+                            return Err(e);
+                        }
                     };
                     let signature = content_filter::sigv1_from_parts(
                         opt_sig_prefix,
@@ -625,7 +662,7 @@ pub mod api {
     }
 
     fn unpack_operation_contents(
-        contents: Dynamic<u30, Sequence<block_info::Proto016PtMumbaiOperationAlphaContents>>
+        contents: Dynamic<u30, Sequence<block_info::Proto016PtMumbaiOperationAlphaContents>>,
     ) -> Result<Vec<MumbaiOperationContents>, MumbaiConversionError> {
         contents
             .into_inner()
@@ -635,11 +672,11 @@ pub mod api {
     }
 
     mod content_filter {
-        use tedium::{ FixedBytes, Encode, Decode };
+        use tedium::{Decode, Encode, FixedBytes};
 
         use crate::{
-            core::{ SignatureV1, ballot::InvalidBallotError },
-            mumbai::error::{ MumbaiConversionError, UnexpectedSignaturePrefixError },
+            core::{ballot::InvalidBallotError, SignatureV1},
+            mumbai::error::{MumbaiConversionError, UnexpectedSignaturePrefixError},
         };
 
         use super::MumbaiOperationContents;
@@ -648,7 +685,7 @@ pub mod api {
             crate::mumbai::raw::block_info::Proto016PtMumbaiOperationAlphaContentsOrSignaturePrefix;
 
         fn transcode_contents_without_sig(
-            value: ContentsOrSigPref
+            value: ContentsOrSigPref,
         ) -> Result<MumbaiOperationContents, InvalidBallotError> {
             let buf = value.to_bytes();
             let raw =
@@ -671,10 +708,13 @@ pub mod api {
         }
 
         pub(super) fn split_operations_sig_prefix(
-            elts: Vec<ContentsOrSigPref>
+            elts: Vec<ContentsOrSigPref>,
         ) -> Result<
-            (Vec<super::MumbaiOperationContents>, Option<tedium::FixedBytes<32>>),
-            MumbaiConversionError
+            (
+                Vec<super::MumbaiOperationContents>,
+                Option<tedium::FixedBytes<32>>,
+            ),
+            MumbaiConversionError,
         > {
             let mut iter = elts.into_iter();
             let opt_sig_prefix = {
@@ -701,7 +741,7 @@ pub mod api {
 
         pub(super) fn sigv1_from_parts(
             opt_sig_prefix: Option<tedium::FixedBytes<32>>,
-            signature_suffix: FixedBytes<64>
+            signature_suffix: FixedBytes<64>,
         ) -> SignatureV1 {
             match opt_sig_prefix {
                 Some(pref) => {
@@ -765,25 +805,27 @@ pub mod api {
         fn unpack_block_operations(
             operations: Dynamic<
                 u30,
-                Sequence<Dynamic<u30, Dynamic<u30, Sequence<crate::mumbai::raw::Operation>>>>
-            >
+                Sequence<Dynamic<u30, Dynamic<u30, Sequence<crate::mumbai::raw::Operation>>>>,
+            >,
         ) -> Result<Vec<Vec<MumbaiOperation>>, MumbaiConversionError> {
             operations
                 .into_inner()
                 .into_iter()
-                .map(|ddx|
-                    ddx
-                        .into_inner()
+                .map(|ddx| {
+                    ddx.into_inner()
                         .into_inner()
                         .into_iter()
                         .map(|op| op.try_into())
                         .collect::<Result<Vec<MumbaiOperation>, MumbaiConversionError>>()
-                )
+                })
                 .collect()
         }
 
         impl tedium::Decode for MumbaiBlockInfo {
-            fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+            where
+                Self: Sized,
+            {
                 let raw = <crate::mumbai::raw::BlockInfo as tedium::Decode>::parse(p)?;
                 Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
             }

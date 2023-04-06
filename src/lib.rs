@@ -1,5 +1,5 @@
-extern crate tezos_codegen;
 extern crate tedium;
+extern crate tezos_codegen;
 #[macro_use]
 extern crate serde;
 

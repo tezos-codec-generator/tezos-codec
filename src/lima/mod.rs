@@ -1,4 +1,4 @@
-use tezos_codegen::proto015_ptlimapt::{ block_info, baking_rights, constants };
+use tezos_codegen::proto015_ptlimapt::{baking_rights, block_info, constants};
 
 pub mod error {
     use std::convert::Infallible;
@@ -34,8 +34,7 @@ pub mod error {
 
     impl From<Infallible> for LimaConversionError {
         fn from(value: Infallible) -> Self {
-            match value {
-            }
+            match value {}
         }
     }
 }
@@ -82,12 +81,12 @@ macro_rules! from_pkh {
 from_pkh!(baking_rights, constants, block_info);
 
 pub mod raw {
-    pub use tezos_codegen::proto015_ptlimapt::level;
-    pub use tezos_codegen::proto015_ptlimapt::constants;
-    pub use tezos_codegen::proto015_ptlimapt::block_info;
     pub use tezos_codegen::proto015_ptlimapt::baking_rights;
+    pub use tezos_codegen::proto015_ptlimapt::block_info;
+    pub use tezos_codegen::proto015_ptlimapt::constants;
+    pub use tezos_codegen::proto015_ptlimapt::level;
 
-    pub(crate) use block_info::{ Operation, RawBlockHeader, BlockHeaderMetadata };
+    pub(crate) use block_info::{BlockHeaderMetadata, Operation, RawBlockHeader};
 
     pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
     pub type OperationResult =
@@ -127,38 +126,32 @@ pub mod raw {
 }
 
 pub mod api {
-    use num_bigint::{ BigUint, BigInt };
-    use tedium::{ Dynamic, Sequence, u30 };
+    use super::{
+        error::LimaConversionError,
+        raw::{
+            self,
+            block_info::{
+                OperationDenestDyn, Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
+                Proto015PtLimaPtOperationAlphaContents,
+                Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
+                Proto015PtLimaPtOperationAlphaOperationWithMetadata,
+            },
+        },
+    };
+    use num_bigint::{BigInt, BigUint};
+    use tedium::{u30, Dynamic, Sequence};
     use tezos_codegen::proto015_ptlimapt::constants::{
         Proto015PtLimaPtConstantsMinimalParticipationRatio,
         Proto015PtLimaPtConstantsRatioOfFrozenDepositsSlashedPerDoubleEndorsement,
     };
-    use super::{
-        raw::{
-            self,
-            block_info::{
-                Proto015PtLimaPtOperationAlphaContents,
-                Proto015PtLimaPtOperationAlphaOperationWithMetadata,
-                Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
-                OperationDenestDyn,
-                Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
-            },
-        },
-        error::LimaConversionError,
-    };
 
     use crate::{
         core::{
-            ProtocolHash,
-            PublicKeyHashV0,
-            BlockHash,
-            ChainId,
-            RatioU16,
+            ballot::{self, Ballot, InvalidBallotError},
+            BlockHash, ChainId, NonceHash, ProtocolHash, PublicKeyHashV0, RatioU16,
             VotingPeriodKind,
-            NonceHash,
-            ballot::{ Ballot, self, InvalidBallotError },
         },
-        traits::{ ContainsBallots, Crypto, ContainsProposals },
+        traits::{ContainsBallots, ContainsProposals, Crypto},
     };
 
     /// Cross-module canonical type for Lima `block_info` values
@@ -172,26 +165,28 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaBlockInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw: raw::BlockInfo = raw::BlockInfo::parse(p)?;
             Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
     }
 
     fn unpack_block_operations(
-        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>
+        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>,
     ) -> Result<Vec<Vec<LimaOperation>>, LimaConversionError> {
         operations
             .into_inner()
             .into_iter()
-            .map(|ddx|
-                ddx
-                    .into_inner()
+            .map(|ddx| {
+                ddx.into_inner()
                     .into_inner()
                     .into_iter()
                     .map(|op| op.try_into())
                     .collect::<Result<Vec<LimaOperation>, LimaConversionError>>()
-            )
+            })
             .collect()
     }
 
@@ -213,7 +208,9 @@ pub mod api {
         type ProposalsType = LimaProposals;
 
         fn has_proposals(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_proposals()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_proposals()))
         }
 
         fn count_proposals(&self) -> usize {
@@ -229,15 +226,16 @@ pub mod api {
         type BallotType = LimaBallot;
 
         fn has_ballots(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_ballots()))
         }
 
         fn count_ballots(&self) -> usize {
-            self.operations
-                .iter()
-                .fold(0usize, |major, ops| {
-                    ops.iter().fold(major, |minor, op| { minor + op.count_ballots() })
-                })
+            self.operations.iter().fold(0usize, |major, ops| {
+                ops.iter()
+                    .fold(major, |minor, op| minor + op.count_ballots())
+            })
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
@@ -342,24 +340,25 @@ pub mod api {
                 timestamp: crate::core::Timestamp::from_i64(value.timestamp),
                 validation_pass: value.validation_pass,
                 operations_hash: crate::core::OperationListListHash::from_fixed_bytes(
-                    value.operations_hash.operation_list_list_hash
+                    value.operations_hash.operation_list_list_hash,
                 ),
-                fitness: value.fitness
+                fitness: value
+                    .fitness
                     .into_inner()
                     .into_iter()
                     .map(|elt| elt.into_inner())
                     .collect(),
                 context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
                 payload_hash: crate::core::ValueHash::from_fixed_bytes(
-                    value.payload_hash.value_hash
+                    value.payload_hash.value_hash,
                 ),
                 payload_round: value.payload_round,
                 proof_of_work_nonce: LimaProofOfWorkNonce::from_fixed_bytes(
-                    value.proof_of_work_nonce
+                    value.proof_of_work_nonce,
                 ),
-                seed_nonce_hash: value.seed_nonce_hash.map(|nonce|
-                    crate::core::NonceHash::from_fixed_bytes(nonce.cycle_nonce)
-                ),
+                seed_nonce_hash: value
+                    .seed_nonce_hash
+                    .map(|nonce| crate::core::NonceHash::from_fixed_bytes(nonce.cycle_nonce)),
                 liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
                 signature: crate::core::SignatureV0::from_fixed_bytes(value.signature.signature_v0),
             }
@@ -376,10 +375,13 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaVotingPeriodInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw =
                 raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(
-                    p
+                    p,
                 )?;
             Ok(raw.into())
         }
@@ -400,9 +402,10 @@ pub mod api {
     }
 
     impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo>
-    for LimaVotingPeriodInfo {
+        for LimaVotingPeriodInfo
+    {
         fn from(
-            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo,
         ) -> Self {
             Self {
                 voting_period: value.voting_period.into(),
@@ -417,9 +420,7 @@ pub mod api {
             write!(
                 f,
                 "{{ voting_period: {}, position: {}, remaining: {} }}",
-                self.voting_period,
-                self.position,
-                self.remaining
+                self.voting_period, self.position, self.remaining
             )
         }
     }
@@ -450,9 +451,7 @@ pub mod api {
             write!(
                 f,
                 "{{ index: {}, kind: {}, start_position: {} }}",
-                self.index,
-                self.kind,
-                self.start_position
+                self.index, self.kind, self.start_position
             )
         }
     }
@@ -468,9 +467,10 @@ pub mod api {
     }
 
     impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod>
-    for LimaVotingPeriod {
+        for LimaVotingPeriod
+    {
         fn from(
-            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
         ) -> Self {
             Self {
                 index: value.index,
@@ -488,16 +488,21 @@ pub mod api {
         max_operations_ttl: i32,
         max_operation_data_length: i32,
         max_block_header_length: i32,
-        max_operation_list_length: Vec<raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq>,
+        max_operation_list_length: Vec<
+            raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq,
+        >,
         proposer: PublicKeyHashV0,
         baker: PublicKeyHashV0,
         level_info: LimaLevelInfo,
         voting_period_info: LimaVotingPeriodInfo,
         nonce_hash: Option<NonceHash>,
-        deactivated: Vec<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq>,
+        deactivated: Vec<
+            raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq,
+        >,
         balance_updates: Vec<raw::block_info::Proto015PtLimaPtOperationMetadataAlphaBalance>,
         liquidity_baking_toggle_ema: i32,
-        implicit_operations_results: Vec<raw::block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult>,
+        implicit_operations_results:
+            Vec<raw::block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult>,
         proposer_consensus_key: PublicKeyHashV0,
         baker_consensus_key: PublicKeyHashV0,
         consumed_milligas: BigUint,
@@ -518,7 +523,7 @@ pub mod api {
                 max_operation_data_length: value.max_operation_data_length.to_i32(),
                 max_block_header_length: value.max_block_header_length.to_i32(),
                 max_operation_list_length: Sequence::into_inner(
-                    value.max_operation_list_length.into_inner().into_inner()
+                    value.max_operation_list_length.into_inner().into_inner(),
                 ),
                 proposer: value.proposer.signature_v0_public_key_hash.into(),
                 baker: value.baker.signature_v0_public_key_hash.into(),
@@ -528,13 +533,21 @@ pub mod api {
                 deactivated: value.deactivated.into_inner().into_inner(),
                 balance_updates: value.balance_updates.into_inner().into_inner(),
                 liquidity_baking_toggle_ema: value.liquidity_baking_toggle_ema,
-                implicit_operations_results: value.implicit_operations_results
+                implicit_operations_results: value
+                    .implicit_operations_results
                     .into_inner()
                     .into_inner(),
-                proposer_consensus_key: value.proposer_consensus_key.signature_v0_public_key_hash.into(),
-                baker_consensus_key: value.baker_consensus_key.signature_v0_public_key_hash.into(),
+                proposer_consensus_key: value
+                    .proposer_consensus_key
+                    .signature_v0_public_key_hash
+                    .into(),
+                baker_consensus_key: value
+                    .baker_consensus_key
+                    .signature_v0_public_key_hash
+                    .into(),
                 consumed_milligas: value.consumed_milligas.into_inner(),
-                dal_slot_availability: value.dal_slot_availability
+                dal_slot_availability: value
+                    .dal_slot_availability
                     .into_inner()
                     .map(tedium::Z::into_inner),
             }
@@ -542,7 +555,7 @@ pub mod api {
     }
 
     fn unpack_metadata_nonce_hash(
-        value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash
+        value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
     ) -> Option<NonceHash> {
         match value {
             Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::None(_) => None,
@@ -561,7 +574,9 @@ pub mod api {
 
     impl From<super::raw::block_info::OperationShellHeader> for LimaOperationShellHeader {
         fn from(value: super::raw::block_info::OperationShellHeader) -> Self {
-            Self { branch: BlockHash::from_fixed_bytes(value.branch.block_hash) }
+            Self {
+                branch: BlockHash::from_fixed_bytes(value.branch.block_hash),
+            }
         }
     }
 
@@ -638,13 +653,11 @@ pub mod api {
 
         #[test]
         fn test_has_proposals() {
-            let should_have = mock_operation(
-                LimaOperationContents::Proposals(LimaProposals {
-                    source: PublicKeyHashV0::Ed25519(FixedBytes::from_array([0u8; 20])),
-                    period: 12,
-                    proposals: vec![crate::core::ProtocolHash::from_byte_array([0u8; 32])],
-                })
-            );
+            let should_have = mock_operation(LimaOperationContents::Proposals(LimaProposals {
+                source: PublicKeyHashV0::Ed25519(FixedBytes::from_array([0u8; 20])),
+                period: 12,
+                proposals: vec![crate::core::ProtocolHash::from_byte_array([0u8; 32])],
+            }));
             assert!(should_have.has_proposals());
         }
     }
@@ -715,28 +728,36 @@ pub mod api {
 
         fn has_ballots(&self) -> bool {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().any(ContainsBallots::has_ballots),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().any(ContainsBallots::has_ballots),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().any(ContainsBallots::has_ballots)
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(ContainsBallots::has_ballots)
+                }
             }
         }
 
         fn count_ballots(&self) -> usize {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().map(ContainsBallots::count_ballots).sum(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().map(ContainsBallots::count_ballots).sum(),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().map(ContainsBallots::count_ballots).sum()
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().map(ContainsBallots::count_ballots).sum()
+                }
             }
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
+                LimaOperationContainer::WithMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(ContainsBallots::get_ballots)
+                    .collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(ContainsBallots::get_ballots)
+                    .collect(),
             }
         }
     }
@@ -746,28 +767,38 @@ pub mod api {
 
         fn has_proposals(&self) -> bool {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().any(ContainsProposals::has_proposals),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().any(ContainsProposals::has_proposals),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().any(ContainsProposals::has_proposals)
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(ContainsProposals::has_proposals)
+                }
             }
         }
 
         fn count_proposals(&self) -> usize {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().map(ContainsProposals::count_proposals).sum(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().map(ContainsProposals::count_proposals).sum(),
+                LimaOperationContainer::WithMetadata { contents, .. } => contents
+                    .iter()
+                    .map(ContainsProposals::count_proposals)
+                    .sum(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
+                    .iter()
+                    .map(ContainsProposals::count_proposals)
+                    .sum(),
             }
         }
 
         fn get_proposals(&self) -> Vec<Self::ProposalsType> {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
+                LimaOperationContainer::WithMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(ContainsProposals::get_proposals)
+                    .collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(ContainsProposals::get_proposals)
+                    .collect(),
             }
         }
     }
@@ -789,7 +820,11 @@ pub mod api {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "Account `")?;
             self.source.base58check_fmt(f)?;
-            writeln!(f, "` proposed the following protocols during period {}:", self.period)?;
+            writeln!(
+                f,
+                "` proposed the following protocols during period {}:",
+                self.period
+            )?;
             for proposal in self.proposals.iter() {
                 writeln!(f, "\t")?;
                 proposal.base58check_fmt(f)?;
@@ -817,7 +852,8 @@ pub mod api {
             Self {
                 source: value.source.signature_v0_public_key_hash.into(),
                 period: value.period,
-                proposals: value.proposals
+                proposals: value
+                    .proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -831,7 +867,8 @@ pub mod api {
             Self {
                 source: value.source.signature_v0_public_key_hash.into(),
                 period: value.period,
-                proposals: value.proposals
+                proposals: value
+                    .proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -937,7 +974,7 @@ pub mod api {
     type RawOpContentsAndResult = Proto015PtLimaPtOperationAlphaOperationContentsAndResult;
 
     fn unpack_operation_contents(
-        contents: Sequence<RawOpContents>
+        contents: Sequence<RawOpContents>,
     ) -> Result<Vec<LimaOperationContents>, InvalidBallotError> {
         contents
             .into_iter()
@@ -946,7 +983,7 @@ pub mod api {
     }
 
     fn unpack_operation_contents_and_result(
-        contents: Sequence<RawOpContentsAndResult>
+        contents: Sequence<RawOpContentsAndResult>,
     ) -> Result<Vec<LimaOperationContentsAndResult>, InvalidBallotError> {
         contents
             .into_iter()
@@ -958,7 +995,7 @@ pub mod api {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::OperationDenestDyn
+            value: super::raw::block_info::OperationDenestDyn,
         ) -> Result<Self, Self::Error> {
             match value {
                 OperationDenestDyn::Operation_with_too_large_metadata(
@@ -966,21 +1003,19 @@ pub mod api {
                         contents,
                         signature,
                     },
-                ) =>
-                    Ok(Self::WithoutMetadata {
-                        contents: unpack_operation_contents(contents)?,
-                        signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                    }),
+                ) => Ok(Self::WithoutMetadata {
+                    contents: unpack_operation_contents(contents)?,
+                    signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
+                }),
                 OperationDenestDyn::Operation_without_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_without_metadata {
                         contents,
                         signature,
                     },
-                ) =>
-                    Ok(Self::WithoutMetadata {
-                        contents: unpack_operation_contents(contents)?,
-                        signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                    }),
+                ) => Ok(Self::WithoutMetadata {
+                    contents: unpack_operation_contents(contents)?,
+                    signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
+                }),
                 OperationDenestDyn::Operation_with_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_with_metadata(inner),
                 ) => {
@@ -1015,8 +1050,7 @@ pub mod api {
         }
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-    #[derive(Serialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize)]
     pub struct LimaBallot {
         source: PublicKeyHashV0,
         period: i32,
@@ -1038,9 +1072,14 @@ pub mod api {
             source: PublicKeyHashV0,
             period: i32,
             proposal: ProtocolHash,
-            ballot: Ballot
+            ballot: Ballot,
         ) -> Self {
-            Self { source, period, proposal, ballot }
+            Self {
+                source,
+                period,
+                proposal,
+                ballot,
+            }
         }
 
         #[inline(always)]
@@ -1086,15 +1125,16 @@ pub mod api {
     }
 
     impl TryFrom<super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot>
-    for LimaBallot {
+        for LimaBallot
+    {
         type Error = ballot::InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot
+            value: super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: crate::core::PublicKeyHashV0::from(
-                    value.source.signature_v0_public_key_hash
+                    value.source.signature_v0_public_key_hash,
                 ),
                 period: value.period,
                 proposal: crate::core::ProtocolHash::from(value.proposal.protocol_hash),
@@ -1201,40 +1241,34 @@ pub mod api {
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect(),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                }
             }
         }
 
         fn has_ballots(&self) -> bool {
             match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents.iter().any(|op| op.has_ballots()),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents.iter().any(|op| op.has_ballots()),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().any(|op| op.has_ballots())
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(|op| op.has_ballots())
+                }
             }
         }
 
         fn count_ballots(&self) -> usize {
             match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } =>
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } =>
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum(),
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().map(|op| op.count_ballots()).sum()
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().map(|op| op.count_ballots()).sum()
+                }
             }
         }
     }
@@ -1250,13 +1284,13 @@ pub mod api {
         max_anon_ops_per_block: u8,
         max_operation_data_length: i32, // originally i31
         max_proposals_per_delegate: u8,
-        max_micheline_node_count: i32, // originally i31
-        max_micheline_bytes_limit: i32, // originally i31
+        max_micheline_node_count: i32,           // originally i31
+        max_micheline_bytes_limit: i32,          // originally i31
         max_allowed_global_constants_depth: i32, // originally i31
         cache_layout_size: u8,
         michelson_maximum_type_size: u16,
         sc_max_wrapped_proof_binary_size: i32, // originally ::tedium::i31,
-        sc_rollup_message_size_limit: i32, // originally ::tedium::i31,
+        sc_rollup_message_size_limit: i32,     // originally ::tedium::i31,
         preserved_cycles: u8,
         blocks_per_cycle: i32,
         blocks_per_commitment: i32,
@@ -1264,7 +1298,7 @@ pub mod api {
         blocks_per_stake_snapshot: i32,
         cycles_per_voting_period: i32,
         hard_gas_limit_per_operation: BigInt, // originally ::tedium::Z,
-        hard_gas_limit_per_block: BigInt, // originally ::tedium::Z,
+        hard_gas_limit_per_block: BigInt,     // originally ::tedium::Z,
         proof_of_work_threshold: i64,
         minimal_stake: BigUint, // originally ::tedium::N,
         vdf_difficulty: i64,
@@ -1272,8 +1306,8 @@ pub mod api {
         origination_size: i32,
         baking_reward_fixed_portion: BigUint, // originally ::tedium::N,
         baking_reward_bonus_per_slot: BigUint, // originally ::tedium::N,
-        endorsing_reward_per_slot: BigUint, // originally ::tedium::N,
-        cost_per_byte: BigUint, // originally ::tedium::N,
+        endorsing_reward_per_slot: BigUint,   // originally ::tedium::N,
+        cost_per_byte: BigUint,               // originally ::tedium::N,
         hard_storage_limit_per_operation: BigInt, // originally ::tedium::Z,
         quorum_min: i32,
         quorum_max: i32,
@@ -1284,10 +1318,10 @@ pub mod api {
         minimal_block_delay: i64,
         delay_increment_per_round: i64,
         consensus_committee_size: i32, // originally ::tedium::i31
-        consensus_threshold: i32, // originally ::tedium::i31
+        consensus_threshold: i32,      // originally ::tedium::i31
         minimal_participation_ratio: RatioU16,
-        max_slashing_period: i32, // originally ::tedium::i31
-        frozen_deposits_percentage: i32, // originally ::tedium::i31
+        max_slashing_period: i32,          // originally ::tedium::i31
+        frozen_deposits_percentage: i32,   // originally ::tedium::i31
         double_baking_punishment: BigUint, // originally ::tedium::N
         ratio_of_frozen_deposits_slashed_per_double_endorsement: RatioU16,
         testnet_dictator: Option<PublicKeyHashV0>,
@@ -1371,7 +1405,10 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaConstants {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             Ok(<super::raw::Constants as tedium::Decode>::parse(p)?.into())
         }
     }
@@ -1403,7 +1440,9 @@ pub mod api {
                 max_proposals_per_delegate: value.max_proposals_per_delegate,
                 max_micheline_node_count: value.max_micheline_node_count.to_i32(),
                 max_micheline_bytes_limit: value.max_micheline_bytes_limit.to_i32(),
-                max_allowed_global_constants_depth: value.max_allowed_global_constants_depth.to_i32(),
+                max_allowed_global_constants_depth: value
+                    .max_allowed_global_constants_depth
+                    .to_i32(),
                 cache_layout_size: value.cache_layout_size,
                 michelson_maximum_type_size: value.michelson_maximum_type_size,
                 sc_max_wrapped_proof_binary_size: value.sc_max_wrapped_proof_binary_size.to_i32(),
@@ -1425,7 +1464,9 @@ pub mod api {
                 baking_reward_bonus_per_slot: value.baking_reward_bonus_per_slot.into_inner(),
                 endorsing_reward_per_slot: value.endorsing_reward_per_slot.into_inner(),
                 cost_per_byte: value.cost_per_byte.into_inner(),
-                hard_storage_limit_per_operation: value.hard_storage_limit_per_operation.into_inner(),
+                hard_storage_limit_per_operation: value
+                    .hard_storage_limit_per_operation
+                    .into_inner(),
                 quorum_min: value.quorum_min,
                 quorum_max: value.quorum_max,
                 min_proposal_quorum: value.min_proposal_quorum,
@@ -1440,42 +1481,67 @@ pub mod api {
                 max_slashing_period: value.max_slashing_period.to_i32(),
                 frozen_deposits_percentage: value.frozen_deposits_percentage.to_i32(),
                 double_baking_punishment: value.double_baking_punishment.into_inner(),
-                ratio_of_frozen_deposits_slashed_per_double_endorsement: value.ratio_of_frozen_deposits_slashed_per_double_endorsement.into(),
-                testnet_dictator: value.testnet_dictator.map(|x|
-                    x.signature_v0_public_key_hash.into()
-                ),
+                ratio_of_frozen_deposits_slashed_per_double_endorsement: value
+                    .ratio_of_frozen_deposits_slashed_per_double_endorsement
+                    .into(),
+                testnet_dictator: value
+                    .testnet_dictator
+                    .map(|x| x.signature_v0_public_key_hash.into()),
                 initial_seed: value.initial_seed.map(|x| x.random.into()),
                 cache_script_size: value.cache_script_size.to_i32(),
                 cache_stake_distribution_cycles: value.cache_stake_distribution_cycles,
                 cache_sampler_state_cycles: value.cache_sampler_state_cycles,
                 tx_rollup_enable: value.tx_rollup_enable,
                 tx_rollup_origination_size: value.tx_rollup_origination_size.to_i32(),
-                tx_rollup_hard_size_limit_per_inbox: value.tx_rollup_hard_size_limit_per_inbox.to_i32(),
-                tx_rollup_hard_size_limit_per_message: value.tx_rollup_hard_size_limit_per_message.to_i32(),
-                tx_rollup_max_withdrawals_per_batch: value.tx_rollup_max_withdrawals_per_batch.to_i32(),
+                tx_rollup_hard_size_limit_per_inbox: value
+                    .tx_rollup_hard_size_limit_per_inbox
+                    .to_i32(),
+                tx_rollup_hard_size_limit_per_message: value
+                    .tx_rollup_hard_size_limit_per_message
+                    .to_i32(),
+                tx_rollup_max_withdrawals_per_batch: value
+                    .tx_rollup_max_withdrawals_per_batch
+                    .to_i32(),
                 tx_rollup_commitment_bond: value.tx_rollup_commitment_bond.into_inner(),
                 tx_rollup_finality_period: value.tx_rollup_finality_period.to_i32(),
                 tx_rollup_withdraw_period: value.tx_rollup_withdraw_period.to_i32(),
                 tx_rollup_max_inboxes_count: value.tx_rollup_max_inboxes_count.to_i32(),
                 tx_rollup_max_messages_per_inbox: value.tx_rollup_max_messages_per_inbox.to_i32(),
                 tx_rollup_max_commitments_count: value.tx_rollup_max_commitments_count.to_i32(),
-                tx_rollup_cost_per_byte_ema_factor: value.tx_rollup_cost_per_byte_ema_factor.to_i32(),
+                tx_rollup_cost_per_byte_ema_factor: value
+                    .tx_rollup_cost_per_byte_ema_factor
+                    .to_i32(),
                 tx_rollup_max_ticket_payload_size: value.tx_rollup_max_ticket_payload_size.to_i32(),
-                tx_rollup_rejection_max_proof_size: value.tx_rollup_rejection_max_proof_size.to_i32(),
+                tx_rollup_rejection_max_proof_size: value
+                    .tx_rollup_rejection_max_proof_size
+                    .to_i32(),
                 tx_rollup_sunset_level: value.tx_rollup_sunset_level,
                 dal_parametric: value.dal_parametric.into(), // TODO: stent this as a scaffolding alias
                 sc_rollup_enable: value.sc_rollup_enable,
                 sc_rollup_origination_size: value.sc_rollup_origination_size.to_i32(),
-                sc_rollup_challenge_window_in_blocks: value.sc_rollup_challenge_window_in_blocks.to_i32(),
-                sc_rollup_max_number_of_messages_per_commitment_period: value.sc_rollup_max_number_of_messages_per_commitment_period.to_i32(),
+                sc_rollup_challenge_window_in_blocks: value
+                    .sc_rollup_challenge_window_in_blocks
+                    .to_i32(),
+                sc_rollup_max_number_of_messages_per_commitment_period: value
+                    .sc_rollup_max_number_of_messages_per_commitment_period
+                    .to_i32(),
                 sc_rollup_stake_amount: value.sc_rollup_stake_amount.into_inner(),
-                sc_rollup_commitment_period_in_blocks: value.sc_rollup_commitment_period_in_blocks.to_i32(),
+                sc_rollup_commitment_period_in_blocks: value
+                    .sc_rollup_commitment_period_in_blocks
+                    .to_i32(),
                 sc_rollup_max_lookahead_in_blocks: value.sc_rollup_max_lookahead_in_blocks,
                 sc_rollup_max_active_outbox_levels: value.sc_rollup_max_active_outbox_levels,
-                sc_rollup_max_outbox_messages_per_level: value.sc_rollup_max_outbox_messages_per_level.to_i32(),
-                sc_rollup_number_of_sections_in_dissection: value.sc_rollup_number_of_sections_in_dissection,
-                sc_rollup_timeout_period_in_blocks: value.sc_rollup_timeout_period_in_blocks.to_i32(),
-                sc_rollup_max_number_of_cemented_commitments: value.sc_rollup_max_number_of_cemented_commitments.to_i32(),
+                sc_rollup_max_outbox_messages_per_level: value
+                    .sc_rollup_max_outbox_messages_per_level
+                    .to_i32(),
+                sc_rollup_number_of_sections_in_dissection: value
+                    .sc_rollup_number_of_sections_in_dissection,
+                sc_rollup_timeout_period_in_blocks: value
+                    .sc_rollup_timeout_period_in_blocks
+                    .to_i32(),
+                sc_rollup_max_number_of_cemented_commitments: value
+                    .sc_rollup_max_number_of_cemented_commitments
+                    .to_i32(),
                 zk_rollup_enable: value.zk_rollup_enable,
                 zk_rollup_origination_size: value.zk_rollup_origination_size.to_i32(),
                 zk_rollup_min_pending_to_process: value.zk_rollup_min_pending_to_process.to_i32(),

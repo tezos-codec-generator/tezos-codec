@@ -1,11 +1,11 @@
+pub mod ballot;
 pub mod base58;
 pub mod rpc;
-pub mod ballot;
 
-use std::{ fmt::Display };
+use std::fmt::Display;
 
 use num::rational::Ratio;
-use tedium::{ FixedBytes, Decode };
+use tedium::{Decode, FixedBytes};
 
 #[macro_export]
 macro_rules! boilerplate {
@@ -132,8 +132,8 @@ macro_rules! impl_serde_crypto {
 }
 
 use crate::{
-    traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix },
     impl_crypto_display,
+    traits::{AsPayload, Crypto, DynamicPrefix, StaticPrefix},
 };
 
 boilerplate!(OperationHash = 32);
@@ -272,7 +272,11 @@ pub struct InvalidSignatureV1ByteLengthError(pub(crate) usize);
 
 impl Display for InvalidSignatureV1ByteLengthError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "byte-sequence of length {} cannot be a valid V1 signature (BLS := 96, v0 := 64)", self.0)
+        write!(
+            f,
+            "byte-sequence of length {} cannot be a valid V1 signature (BLS := 96, v0 := 64)",
+            self.0
+        )
     }
 }
 
@@ -305,11 +309,13 @@ mod sigv1_impls {
         fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
             match value.len() {
                 96 => unsafe {
-                    let bytes : FixedBytes<96> = FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<96> =
+                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
                     Ok(Self::Bls(bytes))
                 },
                 64 => unsafe {
-                    let bytes : FixedBytes<64> = FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<64> =
+                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
                     Ok(Self::SigV0(bytes))
                 },
                 other => Err(InvalidSignatureV1ByteLengthError(other)),
@@ -336,7 +342,6 @@ impl Display for TryIntoSigV0Error {
 }
 
 impl std::error::Error for TryIntoSigV0Error {}
-
 
 impl SignatureV1 {
     pub const fn from_signature_v0(sigv0: SignatureV0) -> Self {
@@ -465,7 +470,10 @@ impl std::hash::Hash for PublicKeyHashV0 {
 }
 
 impl tedium::Decode for PublicKeyHashV0 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -483,7 +491,10 @@ impl PublicKeyHashV0 {
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -492,7 +503,7 @@ impl serde::Serialize for PublicKeyHashV0 {
                 "PublicKeyHashV0",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload()
+                self.as_payload(),
             )
         }
     }
@@ -500,10 +511,6 @@ impl serde::Serialize for PublicKeyHashV0 {
 
 boilerplate!(@refonly PublicKeyHashV0 = 20);
 impl_crypto_display!(PublicKeyHashV0);
-
-
-
-
 
 impl PublicKeyHashV0 {
     /// Preimage of ciphertext prefix `tz1`
@@ -611,10 +618,13 @@ impl std::hash::Hash for PublicKeyHashV1 {
 }
 
 impl tedium::Decode for PublicKeyHashV1 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         let tag = p.take_tagword::<PublicKeyHashV1, u8, _>(&[0, 1, 2, 3])?;
         let payload = FixedBytes::<20>::parse(p)?;
-        Ok(unsafe { Self::from_parts_unchecked(tag, payload)})
+        Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
     }
 }
 
@@ -628,7 +638,10 @@ impl PublicKeyHashV1 {
 }
 
 impl serde::Serialize for PublicKeyHashV1 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -637,7 +650,7 @@ impl serde::Serialize for PublicKeyHashV1 {
                 "PublicKeyHashV1",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload()
+                self.as_payload(),
             )
         }
     }
@@ -646,12 +659,8 @@ impl serde::Serialize for PublicKeyHashV1 {
 boilerplate!(@refonly PublicKeyHashV1 = 20);
 impl_crypto_display!(PublicKeyHashV1);
 
-
-
-
-
 impl PublicKeyHashV1 {
-    pub const BLS12_381_BASE58_PREFIX : [u8; 3] = [6, 161, 166];
+    pub const BLS12_381_BASE58_PREFIX: [u8; 3] = [6, 161, 166];
 
     #[must_use]
     #[inline]
@@ -686,9 +695,6 @@ impl DynamicPrefix for PublicKeyHashV1 {
 }
 
 impl Crypto for PublicKeyHashV1 {}
-
-
-
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -739,7 +745,10 @@ impl std::borrow::Borrow<i64> for Timestamp {
 pub struct Mutez(i64);
 
 impl Decode for Mutez {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(i64::parse(p)?.into())
     }
 }
@@ -785,7 +794,10 @@ impl Mutez {
     /// This function is provided as a convenience for end-users who want more control over
     /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
     /// traits implementations, or the [`to_xtz_string`] associated method.
-    pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(i64, u64) -> String {
+    pub fn format_parts<F>(&self, f: F) -> String
+    where
+        F: FnOnce(i64, u64) -> String,
+    {
         let (radix, mantissa) = self.to_parts();
         f(radix, mantissa)
     }
@@ -889,7 +901,10 @@ impl VotingPeriodKind {
     }
 
     pub fn from_u8(raw: u8) -> Self {
-        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
+        assert!(
+            raw < 5,
+            "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]"
+        );
         unsafe { Self::from_u8_unchecked(raw) }
     }
 

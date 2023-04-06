@@ -23,7 +23,10 @@ impl std::fmt::Debug for ProtocolHashPair {
 
 impl ProtocolHashPair {
     pub fn new(protocol: ProtocolHash, next_protocol: ProtocolHash) -> Self {
-        Self { protocol, next_protocol }
+        Self {
+            protocol,
+            next_protocol,
+        }
     }
 
     pub fn protocol(&self) -> ProtocolHash {
@@ -44,25 +47,35 @@ impl ProtocolHashPair {
 }
 
 impl tedium::Decode for ProtocolHashPair {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         let protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
         let next_protocol: ProtocolHash = FixedBytes::<32>::parse(p)?.into();
-        Ok(Self { protocol, next_protocol })
+        Ok(Self {
+            protocol,
+            next_protocol,
+        })
     }
 }
 
 impl Display for ProtocolHashPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ protocol: {}, next_protocol: {} }}", self.protocol, self.next_protocol)
+        write!(
+            f,
+            "{{ protocol: {}, next_protocol: {} }}",
+            self.protocol, self.next_protocol
+        )
     }
 }
 
 pub mod proposals {
-    use std::{ collections::HashMap, borrow::Borrow };
+    use std::{borrow::Borrow, collections::HashMap};
 
     use tedium::Decode;
 
-    use crate::{ core::ProtocolHash, traits::BinaryDataType };
+    use crate::{core::ProtocolHash, traits::BinaryDataType};
 
     #[derive(Clone, Copy, Debug, Decode)]
     struct RawItem(pub ProtocolHash, pub i64);
@@ -75,7 +88,10 @@ pub mod proposals {
     }
 
     impl tedium::Decode for ProposalMap {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw = RawList::parse(p)?;
             let table = raw
                 .into_inner()
@@ -93,21 +109,24 @@ pub mod proposals {
         /// any in-memory construction of a proper [`ProposalMap`].
         pub fn transient_lookup<P: tedium::parse::ParserExt>(
             p: &mut P,
-            key: &ProtocolHash
+            key: &ProtocolHash,
         ) -> tedium::ParseResult<Option<i64>> {
             let _pl = p.process_prefix::<tedium::u30>()?;
-            p.fast_kv_search::<ProtocolHash, i64, _, 32, 8>(
-                key.as_array_ref(),
-                i64::from_be_bytes
-            )
+            p.fast_kv_search::<ProtocolHash, i64, _, 32, 8>(key.as_array_ref(), i64::from_be_bytes)
         }
 
-        pub fn contains<K>(&self, k: K) -> bool where K: Borrow<[u8; 32]> {
+        pub fn contains<K>(&self, k: K) -> bool
+        where
+            K: Borrow<[u8; 32]>,
+        {
             let key = ProtocolHash::from(k.borrow());
             self.table.contains_key(&key)
         }
 
-        pub fn get<K>(&self, k: K) -> Option<i64> where K: Borrow<[u8; 32]> {
+        pub fn get<K>(&self, k: K) -> Option<i64>
+        where
+            K: Borrow<[u8; 32]>,
+        {
             let key = ProtocolHash::from(k.borrow());
             self.table.get(&key).copied()
         }
@@ -119,7 +138,7 @@ pub mod listings {
 
     use tedium::Decode;
 
-    use crate::core::{ PublicKeyHashV0, Mutez };
+    use crate::core::{Mutez, PublicKeyHashV0};
 
     #[derive(Clone, Copy, Debug, Decode)]
     struct RawItem(pub PublicKeyHashV0, pub Mutez);
@@ -131,7 +150,10 @@ pub mod listings {
         table: HashMap<PublicKeyHashV0, Mutez>,
     }
     impl tedium::Decode for ListingMap {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw = RawList::parse(p)?;
             let table = raw
                 .into_inner()
@@ -149,23 +171,28 @@ pub mod listings {
         /// any in-memory construction of a proper [`ListingMap`].
         pub fn transient_lookup<P: tedium::parse::ParserExt>(
             p: &mut P,
-            key: &PublicKeyHashV0
+            key: &PublicKeyHashV0,
         ) -> tedium::ParseResult<Option<Mutez>> {
             let _pl = p.process_prefix::<tedium::u30>()?;
             let raw_key = key.to_discriminated_bytes();
             let key_array = raw_key.try_into().unwrap_or_else(|_| unreachable!());
-            p.fast_kv_search::<PublicKeyHashV0, Mutez, _, 21, 8>(
-                &key_array,
-                |arr| i64::from_be_bytes(arr).into()
-            )
+            p.fast_kv_search::<PublicKeyHashV0, Mutez, _, 21, 8>(&key_array, |arr| {
+                i64::from_be_bytes(arr).into()
+            })
         }
 
-        pub fn contains<K>(&self, k: K) -> bool where PublicKeyHashV0: From<K> {
+        pub fn contains<K>(&self, k: K) -> bool
+        where
+            PublicKeyHashV0: From<K>,
+        {
             let key = PublicKeyHashV0::from(k);
             self.table.contains_key(&key)
         }
 
-        pub fn get<K>(&self, k: K) -> Option<Mutez> where PublicKeyHashV0: From<K> {
+        pub fn get<K>(&self, k: K) -> Option<Mutez>
+        where
+            PublicKeyHashV0: From<K>,
+        {
             let key = PublicKeyHashV0::from(k);
             self.table.get(&key).copied()
         }

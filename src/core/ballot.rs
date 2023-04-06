@@ -7,7 +7,10 @@ pub enum Ballot {
 }
 
 impl serde::Serialize for Ballot {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         if serializer.is_human_readable() {
             serializer.serialize_str(self.to_string().as_str())
         } else {
@@ -43,7 +46,11 @@ pub struct InvalidBallotError(i8);
 
 impl std::fmt::Display for InvalidBallotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Invalid ballot: {} is not in the enum range (0..=2)", self.0)
+        write!(
+            f,
+            "Invalid ballot: {} is not in the enum range (0..=2)",
+            self.0
+        )
     }
 }
 

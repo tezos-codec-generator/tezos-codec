@@ -54,9 +54,10 @@ pub trait ContainsBallotsExt: ContainsBallots {
     fn tally(&self) -> crate::util::VoteStatistics;
 }
 
-impl<T> ContainsBallotsExt
-    for T
-    where T: ContainsBallots, <T as ContainsBallots>::BallotType: BallotLike
+impl<T> ContainsBallotsExt for T
+where
+    T: ContainsBallots,
+    <T as ContainsBallots>::BallotType: BallotLike,
 {
     fn tally(&self) -> crate::util::VoteStatistics {
         let tmp = self.get_ballots();

@@ -1,5 +1,5 @@
-use sha2::{ Sha256, Digest };
 use base58::ToBase58;
+use sha2::{Digest, Sha256};
 
 /// Performs a two-fold iterated SHA256 digest of a byte slice
 /// and returns the leading four bytes of the resulting blob.
@@ -38,6 +38,12 @@ mod tests {
     use super::*;
     #[test]
     fn base58check_sanity() {
-        assert_eq!(to_base58check(&crate::core::PublicKeyHashV0::ED25519_BASE58_PREFIX, &[0u8; 20]), "tz1Ke2h7sDdakHJQh8WX4Z372du1KChsksyU");
+        assert_eq!(
+            to_base58check(
+                &crate::core::PublicKeyHashV0::ED25519_BASE58_PREFIX,
+                &[0u8; 20]
+            ),
+            "tz1Ke2h7sDdakHJQh8WX4Z372du1KChsksyU"
+        );
     }
 }
