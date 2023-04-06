@@ -2,7 +2,7 @@ pub mod ballot;
 pub mod base58;
 pub mod rpc;
 
-use std::fmt::Display;
+use std::{fmt::Display, hint::unreachable_unchecked};
 
 use num::rational::Ratio;
 use tedium::{Decode, FixedBytes};
@@ -567,6 +567,60 @@ impl Crypto for PublicKeyHashV0 {}
 pub enum PublicKeyHashV1 {
     PkhV0(PublicKeyHashV0),
     Bls(FixedBytes<20>),
+}
+
+impl From<PublicKeyHashV0> for PublicKeyHashV1 {
+    fn from(value: PublicKeyHashV0) -> Self {
+        Self::PkhV0(value)
+    }
+}
+
+#[derive(Debug)]
+pub struct UnsupportedAlgorithmError(());
+
+impl std::fmt::Display for UnsupportedAlgorithmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cannot downcast: cryptographic algorithm unsupported in target type")
+    }
+}
+
+impl std::error::Error for UnsupportedAlgorithmError {}
+
+impl TryFrom<PublicKeyHashV1> for PublicKeyHashV0 {
+    type Error = UnsupportedAlgorithmError;
+
+    fn try_from(value: PublicKeyHashV1) -> Result<Self, Self::Error> {
+        match value {
+            PublicKeyHashV1::PkhV0(x) => Ok(x),
+            PublicKeyHashV1::Bls(_) => Err(UnsupportedAlgorithmError(())),
+        }
+    }
+}
+
+impl PublicKeyHashV1 {
+    pub const fn is_pkh_v0_compatible(&self) -> bool {
+        matches!(self, &Self::PkhV0(_))
+    }
+
+    pub const fn is_bls(&self) -> bool {
+        matches!(self, &Self::Bls(_))
+    }
+
+    pub const fn upcast(pkhv0: PublicKeyHashV0) -> Self {
+        Self::PkhV0(pkhv0)
+    }
+
+    pub const fn try_downcast(self) -> Result<PublicKeyHashV0, UnsupportedAlgorithmError> {
+        match self {
+            PublicKeyHashV1::PkhV0(pkhv0) => Ok(pkhv0),
+            PublicKeyHashV1::Bls(_) => Err(UnsupportedAlgorithmError(())),
+        }
+    }
+
+    pub unsafe fn downcast_unchecked(self) -> PublicKeyHashV0 {
+        let Self::PkhV0(pkhv0) = self else { unreachable_unchecked() };
+        pkhv0
+    }
 }
 
 impl PublicKeyHashV1 {
