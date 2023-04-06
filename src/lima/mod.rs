@@ -1,5 +1,45 @@
 use tezos_codegen::proto015_ptlimapt::{ block_info, baking_rights, constants };
 
+pub mod error {
+    use std::convert::Infallible;
+
+    use crate::core::ballot::InvalidBallotError;
+
+    #[derive(Debug)]
+    pub enum LimaConversionError {
+        Ballot(InvalidBallotError),
+    }
+
+    impl std::fmt::Display for LimaConversionError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                LimaConversionError::Ballot(b_err) => write!(f, "{b_err}"),
+            }
+        }
+    }
+
+    impl std::error::Error for LimaConversionError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match self {
+                LimaConversionError::Ballot(b_err) => Some(b_err),
+            }
+        }
+    }
+
+    impl From<InvalidBallotError> for LimaConversionError {
+        fn from(value: InvalidBallotError) -> Self {
+            Self::Ballot(value)
+        }
+    }
+
+    impl From<Infallible> for LimaConversionError {
+        fn from(value: Infallible) -> Self {
+            match value {
+            }
+        }
+    }
+}
+
 macro_rules! from_pkh {
     ($($id:ident),+ $(,)?) => {
         $(
@@ -93,24 +133,33 @@ pub mod api {
         Proto015PtLimaPtConstantsMinimalParticipationRatio,
         Proto015PtLimaPtConstantsRatioOfFrozenDepositsSlashedPerDoubleEndorsement,
     };
-    use super::raw::{
-        self,
-        block_info::{
-            Proto015PtLimaPtOperationAlphaContents,
-            Proto015PtLimaPtOperationAlphaOperationWithMetadata,
-            Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
-            OperationDenestDyn,
-            Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
+    use super::{
+        raw::{
+            self,
+            block_info::{
+                Proto015PtLimaPtOperationAlphaContents,
+                Proto015PtLimaPtOperationAlphaOperationWithMetadata,
+                Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
+                OperationDenestDyn,
+                Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
+            },
         },
+        error::LimaConversionError,
     };
 
     use crate::{
-        core::{ ProtocolHash, PublicKeyHashV0, BlockHash, ChainId, RatioU16, VotingPeriodKind },
-        traits::{ ContainsBallots, Crypto, StaticPrefix, ContainsProposals },
+        core::{
+            ProtocolHash,
+            PublicKeyHashV0,
+            BlockHash,
+            ChainId,
+            RatioU16,
+            VotingPeriodKind,
+            NonceHash,
+            ballot::{ Ballot, self, InvalidBallotError },
+        },
+        traits::{ ContainsBallots, Crypto, ContainsProposals },
     };
-
-    crate::boilerplate!(LimaBlockPayloadHash = 32);
-    crate::impl_crypto_display!(LimaBlockPayloadHash);
 
     /// Cross-module canonical type for Lima `block_info` values
     #[derive(Clone, Debug, Hash, PartialEq)]
@@ -125,13 +174,13 @@ pub mod api {
     impl tedium::Decode for LimaBlockInfo {
         fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
             let raw: raw::BlockInfo = raw::BlockInfo::parse(p)?;
-            Ok(raw.into())
+            Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
     }
 
     fn unpack_block_operations(
         operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>
-    ) -> Vec<Vec<LimaOperation>> {
+    ) -> Result<Vec<Vec<LimaOperation>>, LimaConversionError> {
         operations
             .into_inner()
             .into_iter()
@@ -140,21 +189,23 @@ pub mod api {
                     .into_inner()
                     .into_inner()
                     .into_iter()
-                    .map(|op| op.into())
-                    .collect::<Vec<LimaOperation>>()
+                    .map(|op| op.try_into())
+                    .collect::<Result<Vec<LimaOperation>, LimaConversionError>>()
             )
             .collect()
     }
 
-    impl From<raw::BlockInfo> for LimaBlockInfo {
-        fn from(value: raw::BlockInfo) -> Self {
-            Self {
+    impl TryFrom<raw::BlockInfo> for LimaBlockInfo {
+        type Error = LimaConversionError;
+
+        fn try_from(value: raw::BlockInfo) -> Result<Self, Self::Error> {
+            Ok(Self {
                 chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
                 hash: BlockHash::from(value.hash.block_hash),
                 header: LimaBlockHeader::from(value.header.into_inner()),
                 metadata: value.metadata.map(|x| LimaMetadata::from(x.into_inner())),
-                operations: unpack_block_operations(value.operations),
-            }
+                operations: unpack_block_operations(value.operations)?,
+            })
         }
     }
 
@@ -252,31 +303,7 @@ pub mod api {
         }
     }
 
-    impl LimaBlockPayloadHash {
-        /// Preimage bytes for ciphertext prefix `vh`.
-        pub const BASE58_PREFIX: [u8; 3] = [1, 106, 242];
-    }
-
-    impl crate::traits::StaticPrefix for LimaBlockPayloadHash {
-        const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-    }
-
-    impl crate::traits::Crypto for LimaBlockPayloadHash {}
-
     crate::boilerplate!(LimaProofOfWorkNonce = 8);
-
-    crate::boilerplate!(LimaNonceHash = 32);
-    crate::impl_crypto_display!(LimaNonceHash);
-
-    impl LimaNonceHash {
-        /// Preimage bytes for ciphertext prefix `nce`.
-        pub const BASE58_PREFIX: [u8; 3] = [69, 220, 169];
-    }
-
-    impl StaticPrefix for LimaNonceHash {
-        const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-    }
-    impl Crypto for LimaNonceHash {}
 
     // pub type LimaBlockHeader = raw::RawBlockHeader;
 
@@ -290,10 +317,10 @@ pub mod api {
         operations_hash: crate::core::OperationListListHash,
         fitness: Vec<tedium::Bytes>,
         context: crate::core::ContextHash,
-        payload_hash: LimaBlockPayloadHash,
+        payload_hash: crate::core::ValueHash,
         payload_round: i32,
         proof_of_work_nonce: LimaProofOfWorkNonce,
-        seed_nonce_hash: Option<LimaNonceHash>,
+        seed_nonce_hash: Option<NonceHash>,
         liquidity_baking_toggle_vote: i8,
         signature: crate::core::SignatureV0,
     }
@@ -323,13 +350,15 @@ pub mod api {
                     .map(|elt| elt.into_inner())
                     .collect(),
                 context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
-                payload_hash: LimaBlockPayloadHash::from_fixed_bytes(value.payload_hash.value_hash),
+                payload_hash: crate::core::ValueHash::from_fixed_bytes(
+                    value.payload_hash.value_hash
+                ),
                 payload_round: value.payload_round,
                 proof_of_work_nonce: LimaProofOfWorkNonce::from_fixed_bytes(
                     value.proof_of_work_nonce
                 ),
                 seed_nonce_hash: value.seed_nonce_hash.map(|nonce|
-                    LimaNonceHash::from_fixed_bytes(nonce.cycle_nonce)
+                    crate::core::NonceHash::from_fixed_bytes(nonce.cycle_nonce)
                 ),
                 liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
                 signature: crate::core::SignatureV0::from_fixed_bytes(value.signature.signature_v0),
@@ -348,11 +377,13 @@ pub mod api {
 
     impl tedium::Decode for LimaVotingPeriodInfo {
         fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
-            let raw = raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(p)?;
+            let raw =
+                raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(
+                    p
+                )?;
             Ok(raw.into())
         }
     }
-
 
     impl LimaVotingPeriodInfo {
         pub fn voting_period(&self) -> LimaVotingPeriod {
@@ -399,8 +430,6 @@ pub mod api {
         kind: VotingPeriodKind,
         start_position: i32,
     }
-
-
 
     impl LimaVotingPeriod {
         pub fn index(&self) -> i32 {
@@ -464,7 +493,7 @@ pub mod api {
         baker: PublicKeyHashV0,
         level_info: LimaLevelInfo,
         voting_period_info: LimaVotingPeriodInfo,
-        nonce_hash: Option<LimaNonceHash>,
+        nonce_hash: Option<NonceHash>,
         deactivated: Vec<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq>,
         balance_updates: Vec<raw::block_info::Proto015PtLimaPtOperationMetadataAlphaBalance>,
         liquidity_baking_toggle_ema: i32,
@@ -514,7 +543,7 @@ pub mod api {
 
     fn unpack_metadata_nonce_hash(
         value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash
-    ) -> Option<LimaNonceHash> {
+    ) -> Option<NonceHash> {
         match value {
             Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::None(_) => None,
             Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::Some(
@@ -556,13 +585,15 @@ pub mod api {
         operation: LimaOperationPayload,
     }
 
-    impl From<super::raw::block_info::Operation> for LimaOperation {
-        fn from(value: super::raw::block_info::Operation) -> Self {
-            Self {
+    impl TryFrom<super::raw::block_info::Operation> for LimaOperation {
+        type Error = LimaConversionError;
+
+        fn try_from(value: super::raw::block_info::Operation) -> Result<Self, Self::Error> {
+            Ok(Self {
                 chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
                 hash: crate::core::OperationHash::from_fixed_bytes(value.hash.operation_hash),
-                operation: LimaOperationPayload::from(value.operation_rhs),
-            }
+                operation: LimaOperationPayload::try_from(value.operation_rhs)?,
+            })
         }
     }
 
@@ -656,12 +687,14 @@ pub mod api {
         }
     }
 
-    impl From<super::raw::block_info::OperationRhs> for LimaOperationPayload {
-        fn from(value: super::raw::block_info::OperationRhs) -> Self {
-            Self {
+    impl TryFrom<super::raw::block_info::OperationRhs> for LimaOperationPayload {
+        type Error = InvalidBallotError;
+
+        fn try_from(value: super::raw::block_info::OperationRhs) -> Result<Self, Self::Error> {
+            Ok(Self {
                 shell_header: LimaOperationShellHeader::from(value.0.into_inner()),
-                operation: LimaOperationContainer::from(value.1.into_inner()),
-            }
+                operation: LimaOperationContainer::try_from(value.1.into_inner())?,
+            })
         }
     }
 
@@ -816,20 +849,18 @@ pub mod api {
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaContents),
     }
 
-    impl From<RawOpContents> for LimaOperationContents {
-        fn from(value: RawOpContents) -> Self {
+    impl TryFrom<RawOpContents> for LimaOperationContents {
+        type Error = InvalidBallotError;
+
+        fn try_from(value: RawOpContents) -> Result<Self, Self::Error> {
             match value {
                 Proto015PtLimaPtOperationAlphaContents::Ballot(ballot) => {
-                    Self::Ballot(
-                        LimaBallot::try_from(ballot).unwrap_or_else(|err|
-                            panic!("Error converting ballot: {}", err)
-                        )
-                    )
+                    Ok(Self::Ballot(LimaBallot::try_from(ballot)?))
                 }
                 Proto015PtLimaPtOperationAlphaContents::Proposals(proposals) => {
-                    Self::Proposals(LimaProposals::from(proposals))
+                    Ok(Self::Proposals(LimaProposals::from(proposals)))
                 }
-                _other => Self::Raw(_other),
+                _other => Ok(Self::Raw(_other)),
             }
         }
     }
@@ -842,20 +873,18 @@ pub mod api {
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResult),
     }
 
-    impl From<RawOpContentsAndResult> for LimaOperationContentsAndResult {
-        fn from(value: RawOpContentsAndResult) -> Self {
+    impl TryFrom<RawOpContentsAndResult> for LimaOperationContentsAndResult {
+        type Error = InvalidBallotError;
+
+        fn try_from(value: RawOpContentsAndResult) -> Result<Self, Self::Error> {
             match value {
                 Proto015PtLimaPtOperationAlphaOperationContentsAndResult::Ballot(ballot) => {
-                    Self::Ballot(
-                        LimaBallot::try_from(ballot).unwrap_or_else(|err|
-                            panic!("Error converting ballot: {}", err)
-                        )
-                    )
+                    Ok(Self::Ballot(LimaBallot::try_from(ballot)?))
                 }
                 Proto015PtLimaPtOperationAlphaOperationContentsAndResult::Proposals(proposals) => {
-                    Self::Proposals(LimaProposals::from(proposals))
+                    Ok(Self::Proposals(LimaProposals::from(proposals)))
                 }
-                other => Self::Raw(other),
+                other => Ok(Self::Raw(other)),
             }
         }
     }
@@ -907,24 +936,30 @@ pub mod api {
     type RawOpContents = Proto015PtLimaPtOperationAlphaContents;
     type RawOpContentsAndResult = Proto015PtLimaPtOperationAlphaOperationContentsAndResult;
 
-    fn unpack_operation_contents(contents: Sequence<RawOpContents>) -> Vec<LimaOperationContents> {
+    fn unpack_operation_contents(
+        contents: Sequence<RawOpContents>
+    ) -> Result<Vec<LimaOperationContents>, InvalidBallotError> {
         contents
             .into_iter()
-            .map(|raw_op| LimaOperationContents::from(raw_op))
+            .map(|raw_op| LimaOperationContents::try_from(raw_op))
             .collect()
     }
 
     fn unpack_operation_contents_and_result(
         contents: Sequence<RawOpContentsAndResult>
-    ) -> Vec<LimaOperationContentsAndResult> {
+    ) -> Result<Vec<LimaOperationContentsAndResult>, InvalidBallotError> {
         contents
             .into_iter()
-            .map(|raw_op_and_result| LimaOperationContentsAndResult::from(raw_op_and_result))
+            .map(|raw_op_and_result| LimaOperationContentsAndResult::try_from(raw_op_and_result))
             .collect()
     }
 
-    impl From<super::raw::block_info::OperationDenestDyn> for LimaOperationContainer {
-        fn from(value: super::raw::block_info::OperationDenestDyn) -> Self {
+    impl TryFrom<super::raw::block_info::OperationDenestDyn> for LimaOperationContainer {
+        type Error = InvalidBallotError;
+
+        fn try_from(
+            value: super::raw::block_info::OperationDenestDyn
+        ) -> Result<Self, Self::Error> {
             match value {
                 OperationDenestDyn::Operation_with_too_large_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_with_too_large_metadata {
@@ -932,20 +967,20 @@ pub mod api {
                         signature,
                     },
                 ) =>
-                    Self::WithoutMetadata {
-                        contents: unpack_operation_contents(contents),
+                    Ok(Self::WithoutMetadata {
+                        contents: unpack_operation_contents(contents)?,
                         signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                    },
+                    }),
                 OperationDenestDyn::Operation_without_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_without_metadata {
                         contents,
                         signature,
                     },
                 ) =>
-                    Self::WithoutMetadata {
-                        contents: unpack_operation_contents(contents),
+                    Ok(Self::WithoutMetadata {
+                        contents: unpack_operation_contents(contents)?,
                         signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                    },
+                    }),
                 OperationDenestDyn::Operation_with_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_with_metadata(inner),
                 ) => {
@@ -959,95 +994,23 @@ pub mod api {
                         Proto015PtLimaPtOperationAlphaOperationWithMetadata::Operation_with_metadata(
                             Operation_with_metadata { contents, signature },
                         ) => {
-                            Self::WithMetadata {
+                            Ok(Self::WithMetadata {
                                 contents: unpack_operation_contents_and_result(
                                     contents.into_inner()
-                                ),
+                                )?,
                                 signature: signature.map(|sig| sig.signature_v0.into()),
-                            }
+                            })
                         }
                         Proto015PtLimaPtOperationAlphaOperationWithMetadata::Operation_without_metadata(
                             Operation_without_metadata { contents, signature },
                         ) => {
-                            Self::WithoutMetadata {
-                                contents: unpack_operation_contents(contents.into_inner()),
+                            Ok(Self::WithoutMetadata {
+                                contents: unpack_operation_contents(contents.into_inner())?,
                                 signature: signature.map(|sig| sig.signature_v0.into()),
-                            }
+                            })
                         }
                     }
                 }
-            }
-        }
-    }
-
-    #[repr(i8)]
-    #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-    pub enum Ballot {
-        Yay = 0,
-        Nay = 1,
-        Pass = 2,
-    }
-
-    impl serde::Serialize for Ballot {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            if serializer.is_human_readable() {
-                serializer.serialize_str(self.to_string().as_str())
-            } else {
-                serializer.serialize_i8(*self as i8)
-            }
-        }
-    }
-
-    impl Ballot {
-        #[inline]
-        /// Converts an [i8] to the corresponding Ballot value without
-        /// checking that it is a valid element of the enumeration.
-        ///
-        /// # Safety
-        ///
-        /// This function performs an unchecked [std::mem::transmute] call
-        /// which will produce undefined behavior if the value is not valid
-        /// in the result type. This should only be called on values that are
-        /// either statically known to fall in the correct range, or in code-paths
-        /// that have filtered out all possible invalid values.
-        pub const unsafe fn from_i8_unchecked(raw: i8) -> Self {
-            std::mem::transmute::<i8, Ballot>(raw)
-        }
-
-        pub fn from_i8_checked(raw: i8) -> Self {
-            assert!(matches!(raw, 0..=2));
-            unsafe { Self::from_i8_unchecked(raw) }
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct InvalidBallotError(i8);
-
-    impl std::fmt::Display for InvalidBallotError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "Invalid ballot: {} is not in the enum range (0..=2)", self.0)
-        }
-    }
-
-    impl std::error::Error for InvalidBallotError {}
-
-    impl TryFrom<i8> for Ballot {
-        type Error = InvalidBallotError;
-
-        fn try_from(value: i8) -> Result<Self, Self::Error> {
-            match value {
-                0..=2 => Ok(unsafe { Ballot::from_i8_unchecked(value) }),
-                _ => Err(InvalidBallotError(value)),
-            }
-        }
-    }
-
-    impl std::fmt::Display for Ballot {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::Yay => write!(f, "yay"),
-                Self::Nay => write!(f, "nay"),
-                Self::Pass => write!(f, "pass"),
             }
         }
     }
@@ -1059,16 +1022,6 @@ pub mod api {
         period: i32,
         proposal: ProtocolHash,
         ballot: Ballot,
-    }
-
-    impl crate::traits::BallotLike for Ballot {
-        fn to_tally(&self) -> crate::util::VoteStatistics {
-            match self {
-                Ballot::Yay => crate::util::VoteStatistics::new(1, 0, 0),
-                Ballot::Nay => crate::util::VoteStatistics::new(0, 1, 0),
-                Ballot::Pass => crate::util::VoteStatistics::new(0, 0, 1),
-            }
-        }
     }
 
     impl crate::traits::BallotLike for LimaBallot {
@@ -1134,7 +1087,7 @@ pub mod api {
 
     impl TryFrom<super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot>
     for LimaBallot {
-        type Error = InvalidBallotError;
+        type Error = ballot::InvalidBallotError;
 
         fn try_from(
             value: super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot
@@ -1152,7 +1105,7 @@ pub mod api {
 
     impl TryFrom<super::raw::block_info::proto015ptlimaptoperationalphaoperationcontentsandresult::Ballot>
     for LimaBallot {
-        type Error = InvalidBallotError;
+        type Error = ballot::InvalidBallotError;
 
         fn try_from(
             value: super::raw::block_info::proto015ptlimaptoperationalphaoperationcontentsandresult::Ballot
@@ -1162,7 +1115,7 @@ pub mod api {
                     value.source.signature_v0_public_key_hash
                 ),
                 period: value.period,
-                proposal: crate::core::ProtocolHash::from(value.proposal.protocol_hash),
+                proposal: value.proposal.protocol_hash.into(),
                 ballot: value.ballot.try_into()?,
             })
         }

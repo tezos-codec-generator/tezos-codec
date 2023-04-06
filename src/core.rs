@@ -1,7 +1,8 @@
 pub mod base58;
 pub mod rpc;
+pub mod ballot;
 
-use std::fmt::Display;
+use std::{ fmt::Display };
 
 use num::rational::Ratio;
 use tedium::{ FixedBytes, Decode };
@@ -114,7 +115,7 @@ macro_rules! boilerplate {
 }
 
 macro_rules! impl_serde_crypto {
-    ( $( $tname:ident ),+ $(,)? ) => {
+    ($($tname:ident),+ $(,)?) => {
         $(
             impl serde::Serialize for $tname {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
@@ -130,7 +131,10 @@ macro_rules! impl_serde_crypto {
     };
 }
 
-use crate::{ traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix }, impl_crypto_display };
+use crate::{
+    traits::{ AsPayload, Crypto, StaticPrefix, DynamicPrefix },
+    impl_crypto_display,
+};
 
 boilerplate!(OperationHash = 32);
 impl_crypto_display!(OperationHash);
@@ -230,6 +234,166 @@ impl StaticPrefix for ProtocolHash {
 
 impl Crypto for ProtocolHash {}
 
+boilerplate!(ValueHash = 32);
+impl_crypto_display!(ValueHash);
+
+impl ValueHash {
+    /// Preimage bytes for ciphertext prefix `vh`.
+    pub const BASE58_PREFIX: [u8; 3] = [1, 106, 242];
+}
+
+impl crate::traits::StaticPrefix for ValueHash {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl crate::traits::Crypto for ValueHash {}
+
+crate::boilerplate!(NonceHash = 32);
+crate::impl_crypto_display!(NonceHash);
+
+impl NonceHash {
+    /// Preimage bytes for ciphertext prefix `nce`.
+    pub const BASE58_PREFIX: [u8; 3] = [69, 220, 169];
+}
+
+impl StaticPrefix for NonceHash {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+impl Crypto for NonceHash {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SignatureV1 {
+    SigV0(FixedBytes<64>),
+    Bls(FixedBytes<96>),
+}
+
+#[derive(Debug)]
+pub struct InvalidSignatureV1ByteLengthError(pub(crate) usize);
+
+impl Display for InvalidSignatureV1ByteLengthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "byte-sequence of length {} cannot be a valid V1 signature (BLS := 96, v0 := 64)", self.0)
+    }
+}
+
+impl std::error::Error for InvalidSignatureV1ByteLengthError {}
+
+mod sigv1_impls {
+    use super::*;
+
+    impl From<SignatureV0> for SignatureV1 {
+        fn from(value: SignatureV0) -> Self {
+            Self::SigV0(value.0)
+        }
+    }
+
+    impl From<FixedBytes<64>> for SignatureV1 {
+        fn from(value: FixedBytes<64>) -> Self {
+            Self::SigV0(value)
+        }
+    }
+
+    impl From<FixedBytes<96>> for SignatureV1 {
+        fn from(value: FixedBytes<96>) -> Self {
+            Self::Bls(value)
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for SignatureV1 {
+        type Error = InvalidSignatureV1ByteLengthError;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            match value.len() {
+                96 => unsafe {
+                    let bytes : FixedBytes<96> = FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    Ok(Self::Bls(bytes))
+                },
+                64 => unsafe {
+                    let bytes : FixedBytes<64> = FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    Ok(Self::SigV0(bytes))
+                },
+                other => Err(InvalidSignatureV1ByteLengthError(other)),
+            }
+        }
+    }
+
+    impl TryFrom<tedium::Bytes> for SignatureV1 {
+        type Error = <SignatureV1 as TryFrom<Vec<u8>>>::Error;
+
+        fn try_from(value: tedium::Bytes) -> Result<Self, Self::Error> {
+            Self::try_from(value.into_vec())
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TryIntoSigV0Error;
+
+impl Display for TryIntoSigV0Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cannot downcast SignatureV0-incompatible SignatureV1")
+    }
+}
+
+impl std::error::Error for TryIntoSigV0Error {}
+
+
+impl SignatureV1 {
+    pub const fn from_signature_v0(sigv0: SignatureV0) -> Self {
+        Self::SigV0(sigv0.0)
+    }
+
+    pub const fn is_sigv0_compatible(&self) -> bool {
+        matches!(self, &Self::SigV0(_))
+    }
+
+    pub const fn is_bls(&self) -> bool {
+        matches!(self, &Self::Bls(_))
+    }
+
+    pub fn try_into_sigv0(self) -> Result<SignatureV0, TryIntoSigV0Error> {
+        match self {
+            SignatureV1::SigV0(v0bytes) => Ok(SignatureV0(v0bytes)),
+            SignatureV1::Bls(_) => Err(TryIntoSigV0Error),
+        }
+    }
+
+    pub fn try_from_vec(bytes: Vec<u8>) -> Result<Self, InvalidSignatureV1ByteLengthError> {
+        bytes.try_into()
+    }
+
+    pub fn try_from_bytes(bytes: tedium::Bytes) -> Result<Self, InvalidSignatureV1ByteLengthError> {
+        Self::try_from_vec(bytes.into_vec())
+    }
+
+    pub const fn from_fixed_bls(bls: FixedBytes<96>) -> Self {
+        Self::Bls(bls)
+    }
+
+    pub const fn from_array_bls(bls: [u8; 96]) -> Self {
+        Self::Bls(FixedBytes::from_array(bls))
+    }
+}
+
+impl SignatureV1 {
+    pub const BASE58_PREFIX: [u8; 3] = SignatureV0::BASE58_PREFIX;
+}
+
+impl StaticPrefix for SignatureV1 {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl AsPayload for SignatureV1 {
+    fn as_payload(&self) -> &[u8] {
+        match self {
+            SignatureV1::SigV0(pl) => pl.bytes(),
+            SignatureV1::Bls(pl) => pl.bytes(),
+        }
+    }
+}
+
+impl Crypto for SignatureV1 {}
+
 boilerplate!(SignatureV0 = 64);
 impl_crypto_display!(SignatureV0);
 impl_serde_crypto!(SignatureV0);
@@ -270,8 +434,29 @@ impl PublicKeyHashV0 {
         v.extend_from_slice(self.as_array_ref());
         v
     }
-}
 
+    /// Constructs the appropriate variant of [`PublicKeyHashV0`] from a single-byte discriminant value
+    /// and the 20-byte content-array.
+    ///
+    /// # Safety
+    ///
+    /// It is undefined behavior to call this method with a discriminant-value that is out of the
+    /// valid set of:
+    ///   * `0` for [`Self::Ed25519`]
+    ///   * `1` for [`Self::Secp256k1`]
+    ///   * `2` for [`Self::P256`]
+    ///
+    /// It is the caller's responsibility to ensure that the discriminant value
+    /// they pass in can **never** fall outside this range.
+    pub unsafe fn from_parts_unchecked(disc: u8, bytes: FixedBytes<20>) -> Self {
+        match disc {
+            0 => Self::Ed25519(bytes),
+            1 => Self::Secp256k1(bytes),
+            2 => Self::P256(bytes),
+            _ => std::hint::unreachable_unchecked(),
+        }
+    }
+}
 
 impl std::hash::Hash for PublicKeyHashV0 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -283,12 +468,7 @@ impl tedium::Decode for PublicKeyHashV0 {
     fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
         let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
         let payload = FixedBytes::<20>::parse(p)?;
-        Ok(match tag {
-            0 => Self::Ed25519(payload),
-            1 => Self::Secp256k1(payload),
-            2 => Self::P256(payload),
-            _ => unreachable!()
-        })
+        Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
     }
 }
 
@@ -300,7 +480,6 @@ impl PublicKeyHashV0 {
             PublicKeyHashV0::P256(_) => "P256",
         }
     }
-
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
@@ -321,6 +500,9 @@ impl serde::Serialize for PublicKeyHashV0 {
 
 boilerplate!(@refonly PublicKeyHashV0 = 20);
 impl_crypto_display!(PublicKeyHashV0);
+
+
+
 
 
 impl PublicKeyHashV0 {
@@ -373,6 +555,140 @@ impl DynamicPrefix for PublicKeyHashV0 {
 }
 
 impl Crypto for PublicKeyHashV0 {}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PublicKeyHashV1 {
+    PkhV0(PublicKeyHashV0),
+    Bls(FixedBytes<20>),
+}
+
+impl PublicKeyHashV1 {
+    /// Returns the discriminant value from which a given variant would be deserialized,
+    /// regardless of what discriminant value the Rust compiler assigns that variant.
+    pub const fn virtual_discriminant(&self) -> u8 {
+        match self {
+            Self::PkhV0(pkhv0) => pkhv0.virtual_discriminant(),
+            Self::Bls(_) => 3,
+        }
+    }
+
+    /// Returns the full serialization-equivalent value of a [`PublicKeyHashV0`], primarily for
+    /// purposes of raw memory comparison operations such as [`tedium::parse::ParserExt::fast_kv_search`].
+    pub fn to_discriminated_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::with_capacity(21);
+        v.push(self.virtual_discriminant());
+        v.extend_from_slice(self.as_array_ref());
+        v
+    }
+
+    /// Constructs the appropriate variant of [`PublicKeyHashV1`] from a single-byte discriminant value
+    /// and the 20-byte content-array.
+    ///
+    /// # Safety
+    ///
+    /// It is undefined behavior to call this method with a discriminant-value that is out of the
+    /// valid set of:
+    ///   * `0` for [`PublicKeyHashV0::Ed25519`]
+    ///   * `1` for [`PublicKeyHashV0::Secp256k1`]
+    ///   * `2` for [`PublicKeyHashV0::P256`]
+    ///   * `3` for [`Self::Bls`]
+    ///
+    /// It is the caller's responsibility to ensure that the discriminant value
+    /// they pass in can **never** fall outside this range.
+    pub unsafe fn from_parts_unchecked(disc: u8, bytes: FixedBytes<20>) -> Self {
+        match disc {
+            0..=2 => Self::PkhV0(PublicKeyHashV0::from_parts_unchecked(disc, bytes)),
+            3 => Self::Bls(bytes),
+            _ => std::hint::unreachable_unchecked(),
+        }
+    }
+}
+
+impl std::hash::Hash for PublicKeyHashV1 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.to_discriminated_bytes().hash(state);
+    }
+}
+
+impl tedium::Decode for PublicKeyHashV1 {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        let tag = p.take_tagword::<PublicKeyHashV1, u8, _>(&[0, 1, 2, 3])?;
+        let payload = FixedBytes::<20>::parse(p)?;
+        Ok(unsafe { Self::from_parts_unchecked(tag, payload)})
+    }
+}
+
+impl PublicKeyHashV1 {
+    pub(self) const fn variant_name(&self) -> &'static str {
+        match self {
+            Self::Bls(_) => "Bls",
+            Self::PkhV0(pkhv0) => pkhv0.variant_name(),
+        }
+    }
+}
+
+impl serde::Serialize for PublicKeyHashV1 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        if serializer.is_human_readable() {
+            let tmp: String = self.to_base58check();
+            serializer.serialize_str(tmp.as_str())
+        } else {
+            serializer.serialize_newtype_variant(
+                "PublicKeyHashV1",
+                self.virtual_discriminant() as u32,
+                self.variant_name(),
+                self.as_payload()
+            )
+        }
+    }
+}
+
+boilerplate!(@refonly PublicKeyHashV1 = 20);
+impl_crypto_display!(PublicKeyHashV1);
+
+
+
+
+
+impl PublicKeyHashV1 {
+    pub const BLS12_381_BASE58_PREFIX : [u8; 3] = [6, 161, 166];
+
+    #[must_use]
+    #[inline]
+    /// Converts a borrowed [`PublicKeyHashV1`] into a reference to its constituent bytes,
+    /// discarding any distinction as to what cryptographic algorithm it corresponds to.
+    pub const fn as_fixed_bytes(&self) -> &FixedBytes<20> {
+        match self {
+            Self::PkhV0(pkhv0) => pkhv0.as_fixed_bytes(),
+            Self::Bls(bls) => bls,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Converts a borrowed [`PublicKeyHashV1`] into a reference to its constituent byte-array,
+    /// discarding any distinction as to what cryptographic algorithm it corresponds to.
+    pub const fn as_array_ref(&self) -> &[u8; 20] {
+        match self {
+            Self::PkhV0(pkhv0) => pkhv0.as_array_ref(),
+            Self::Bls(bls) => bls.bytes(),
+        }
+    }
+}
+
+impl DynamicPrefix for PublicKeyHashV1 {
+    fn get_prefix(&self) -> &'static [u8] {
+        match self {
+            PublicKeyHashV1::PkhV0(pkhv0) => pkhv0.get_prefix(),
+            PublicKeyHashV1::Bls(_) => &Self::BLS12_381_BASE58_PREFIX,
+        }
+    }
+}
+
+impl Crypto for PublicKeyHashV1 {}
+
+
+
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -545,14 +861,13 @@ impl From<RatioU16> for Ratio<u16> {
     }
 }
 
-
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum VotingPeriodKind {
     Proposal = 0,
     Exploration = 1,
     Cooldown = 2,
-    Promotion  = 3,
+    Promotion = 3,
     Adoption = 4,
 }
 
@@ -575,7 +890,7 @@ impl VotingPeriodKind {
 
     pub fn from_u8(raw: u8) -> Self {
         assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
-        unsafe { Self::from_u8_unchecked(raw ) }
+        unsafe { Self::from_u8_unchecked(raw) }
     }
 
     pub fn next(self) -> Self {
