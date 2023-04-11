@@ -20,7 +20,10 @@ pub mod hangzhou;
 pub mod ithaca;
 pub mod jakarta;
 pub mod kathmandu;
+#[cfg(feature = "lima")]
 pub mod lima;
+
+#[cfg(feature = "mumbai")]
 pub mod mumbai;
 
 pub mod alpha;

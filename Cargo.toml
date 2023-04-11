@@ -7,15 +7,20 @@ edition = "2021"
 name = "tezos_codec"
 bench = false
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+no_codec = []
+lima = ["tezos-codegen/lima"]
+mumbai = ["tezos-codegen/mumbai"]
+default = ["lima", "mumbai"]
+
+[dependencies.tezos-codegen]
+optional = true
+git = "https://gitlab.com/archaephyrryx/codec_generator"
+branch = "external-runtime"
+default-features = false
 
 [dependencies]
 tezos-data-model = { git = "https://github.com/tezos-codec-generator/tezos-data-model", features = ["serde_impls"] }
-tezos-codegen = { git = "https://gitlab.com/archaephyrryx/codec_generator", features = [
-    "lima",
-    "kathmandu",
-    "mumbai"
-], branch = "external-runtime" }
 serde = { version = "1.0", features = ["derive"] }
 num-bigint = "0.4.3"
 num = "0.4.0"
