@@ -580,7 +580,10 @@ pub struct UnsupportedAlgorithmError(());
 
 impl std::fmt::Display for UnsupportedAlgorithmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "cannot downcast: cryptographic algorithm unsupported in target type")
+        write!(
+            f,
+            "cannot downcast: cryptographic algorithm unsupported in target type"
+        )
     }
 }
 
@@ -949,17 +952,68 @@ impl std::fmt::Display for VotingPeriodKind {
     }
 }
 
+pub struct InvalidDiscriminantError<T> {
+    raw: u8,
+    _proxy: std::marker::PhantomData<T>,
+}
+
+impl<T> InvalidDiscriminantError<T> {
+    pub(self) fn from_raw(raw: u8) -> Self
+    where
+        T: std::any::Any,
+    {
+        Self {
+            raw,
+            _proxy: std::marker::PhantomData::<T>,
+        }
+    }
+}
+
+impl<T: std::any::Any> std::fmt::Debug for InvalidDiscriminantError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InvalidDiscriminantError")
+            .field("raw", &self.raw)
+            .finish()
+    }
+}
+
+impl<T: std::any::Any> std::fmt::Display for InvalidDiscriminantError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "value {} is invalid as a discriminant byte for type {}",
+            self.raw,
+            std::any::type_name::<T>()
+        )
+    }
+}
+
+impl<T: std::any::Any> std::error::Error for InvalidDiscriminantError<T> {}
+
 impl VotingPeriodKind {
     pub const unsafe fn from_u8_unchecked(raw: u8) -> Self {
         std::mem::transmute::<u8, Self>(raw)
     }
 
+    /// Attempts to convert a raw `u8`-encoded voting period discriminant (as obtained by parsing the raw binary)
+    /// into a valid variant of [`VotingPeriodKind`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic if `raw` is invalid as a discriminant of this type (i.e. `raw > 4`).
     pub fn from_u8(raw: u8) -> Self {
         assert!(
             raw < 5,
             "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]"
         );
         unsafe { Self::from_u8_unchecked(raw) }
+    }
+
+    pub fn try_from_u8(raw: u8) -> Result<Self, InvalidDiscriminantError<Self>> {
+        match raw {
+            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) },
+            _ => Err(InvalidDiscriminantError::<Self>::from_raw(raw)),
+        }
     }
 
     pub fn next(self) -> Self {

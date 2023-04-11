@@ -3,17 +3,19 @@ use tezos_codegen::proto015_ptlimapt::{baking_rights, block_info, constants};
 pub mod error {
     use std::convert::Infallible;
 
-    use crate::core::ballot::InvalidBallotError;
+    use crate::core::{ballot::InvalidBallotError, InvalidDiscriminantError, VotingPeriodKind};
 
     #[derive(Debug)]
     pub enum LimaConversionError {
         Ballot(InvalidBallotError),
+        VPKDisc(InvalidDiscriminantError<VotingPeriodKind>),
     }
 
     impl std::fmt::Display for LimaConversionError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 LimaConversionError::Ballot(b_err) => write!(f, "{b_err}"),
+                LimaConversionError::VPKDisc(vpk_err) => write!(f, "{vpk_err}"),
             }
         }
     }
@@ -22,6 +24,7 @@ pub mod error {
         fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
             match self {
                 LimaConversionError::Ballot(b_err) => Some(b_err),
+                LimaConversionError::VPKDisc(vpk_err) => Some(vpk_err),
             }
         }
     }
@@ -29,6 +32,12 @@ pub mod error {
     impl From<InvalidBallotError> for LimaConversionError {
         fn from(value: InvalidBallotError) -> Self {
             Self::Ballot(value)
+        }
+    }
+
+    impl From<InvalidDiscriminantError<VotingPeriodKind>> for LimaConversionError {
+        fn from(value: InvalidDiscriminantError<VotingPeriodKind>) -> Self {
+            Self::VPKDisc(value)
         }
     }
 
@@ -148,8 +157,8 @@ pub mod api {
     use crate::{
         core::{
             ballot::{self, Ballot, InvalidBallotError},
-            BlockHash, ChainId, NonceHash, ProtocolHash, PublicKeyHashV0, RatioU16,
-            VotingPeriodKind,
+            BlockHash, ChainId, InvalidDiscriminantError, NonceHash, ProtocolHash, PublicKeyHashV0,
+            RatioU16, VotingPeriodKind,
         },
         traits::{ContainsBallots, ContainsProposals, Crypto},
     };
@@ -198,7 +207,10 @@ pub mod api {
                 chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
                 hash: BlockHash::from(value.hash.block_hash),
                 header: LimaBlockHeader::from(value.header.into_inner()),
-                metadata: value.metadata.map(|x| LimaMetadata::from(x.into_inner())),
+                metadata: value
+                    .metadata
+                    .map(|x| LimaMetadata::try_from(x.into_inner()))
+                    .transpose()?,
                 operations: unpack_block_operations(value.operations)?,
             })
         }
@@ -383,7 +395,7 @@ pub mod api {
                 raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(
                     p,
                 )?;
-            Ok(raw.into())
+            Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
     }
 
@@ -401,17 +413,19 @@ pub mod api {
         }
     }
 
-    impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo>
+    impl TryFrom<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo>
         for LimaVotingPeriodInfo
     {
-        fn from(
+        type Error = InvalidDiscriminantError<VotingPeriodKind>;
+
+        fn try_from(
             value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo,
-        ) -> Self {
-            Self {
-                voting_period: value.voting_period.into(),
+        ) -> Result<Self, Self::Error> {
+            Ok(Self {
+                voting_period: value.voting_period.try_into()?,
                 position: value.position,
                 remaining: value.remaining,
-            }
+            })
         }
     }
 
@@ -459,24 +473,30 @@ pub mod api {
     pub type RawVotingPeriodKind =
         raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriodKind;
 
-    impl From<RawVotingPeriodKind> for crate::core::VotingPeriodKind {
-        fn from(value: RawVotingPeriodKind) -> Self {
+    impl TryFrom<RawVotingPeriodKind> for crate::core::VotingPeriodKind {
+        type Error = InvalidDiscriminantError<VotingPeriodKind>;
+
+        fn try_from(value: RawVotingPeriodKind) -> Result<Self, Self::Error> {
             let raw = value.get_tagval();
-            unsafe { Self::from_u8_unchecked(raw) }
+            Self::try_from_u8(raw)
         }
     }
 
-    impl From<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod>
-        for LimaVotingPeriod
+    impl
+        TryFrom<
+            raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
+        > for LimaVotingPeriod
     {
-        fn from(
+        type Error = InvalidDiscriminantError<VotingPeriodKind>;
+
+        fn try_from(
             value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
-        ) -> Self {
-            Self {
+        ) -> Result<Self, Self::Error> {
+            Ok(Self {
                 index: value.index,
-                kind: value.kind.into(),
+                kind: value.kind.try_into()?,
                 start_position: value.start_position,
-            }
+            })
         }
     }
 
@@ -515,9 +535,11 @@ pub mod api {
         }
     }
 
-    impl From<raw::BlockHeaderMetadata> for LimaMetadata {
-        fn from(value: raw::BlockHeaderMetadata) -> Self {
-            Self {
+    impl TryFrom<raw::BlockHeaderMetadata> for LimaMetadata {
+        type Error = InvalidDiscriminantError<VotingPeriodKind>;
+
+        fn try_from(value: raw::BlockHeaderMetadata) -> Result<Self, Self::Error> {
+            Ok(Self {
                 test_chain_status: value.test_chain_status,
                 max_operations_ttl: value.max_operations_ttl.to_i32(),
                 max_operation_data_length: value.max_operation_data_length.to_i32(),
@@ -528,7 +550,7 @@ pub mod api {
                 proposer: value.proposer.signature_v0_public_key_hash.into(),
                 baker: value.baker.signature_v0_public_key_hash.into(),
                 level_info: value.level_info.into(),
-                voting_period_info: value.voting_period_info.into(),
+                voting_period_info: value.voting_period_info.try_into()?,
                 nonce_hash: unpack_metadata_nonce_hash(value.nonce_hash),
                 deactivated: value.deactivated.into_inner().into_inner(),
                 balance_updates: value.balance_updates.into_inner().into_inner(),
@@ -550,7 +572,7 @@ pub mod api {
                     .dal_slot_availability
                     .into_inner()
                     .map(tedium::Z::into_inner),
-            }
+            })
         }
     }
 
