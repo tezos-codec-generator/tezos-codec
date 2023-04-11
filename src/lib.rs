@@ -1,4 +1,5 @@
 extern crate tedium;
+#[cfg(any(feature = "lima", feature = "mumbai"))]
 extern crate tezos_codegen;
 #[macro_use]
 extern crate serde;
