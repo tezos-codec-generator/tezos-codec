@@ -814,6 +814,13 @@ impl tedium::conv::len::FixedLength for Mutez {
     const LEN: usize = <i64 as tedium::conv::len::FixedLength>::LEN;
 }
 
+#[macro_export]
+macro_rules! mtz {
+    ( $amount:expr ) => {
+        $crate::core::Mutez::from_i64($amount)
+    };
+}
+
 impl Mutez {
     pub const PRECISION: u64 = 1_000_000;
 
@@ -865,6 +872,7 @@ impl Mutez {
     }
 }
 
+
 impl From<i64> for Mutez {
     fn from(value: i64) -> Self {
         Self(value)
@@ -896,6 +904,37 @@ impl std::ops::Add<i64> for Mutez {
 impl Display for Mutez {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} μtz", self.0)
+    }
+}
+
+#[cfg(test)]
+mod mtz_macro_test {
+    use super::*;
+    use crate::mtz;
+
+    #[test]
+    fn mtz_macro_numlit() {
+        let hundred = mtz!(100);
+        assert_eq!(hundred, Mutez::from(100));
+    }
+
+    #[test]
+    fn mtz_macro_underscore() {
+        let million = mtz!(1_000_000);
+        assert_eq!(million, Mutez::from(1_000_000));
+    }
+
+    #[test]
+    fn mtz_macro_arithmetic() {
+        let fortytwo = mtz!(40 + 2);
+        assert_eq!(fortytwo, Mutez::from_i64(42));
+    }
+
+    #[test]
+    fn mtz_macro_lvalue() {
+        let x : i64 = 1234;
+        let x_mtz = mtz!(x);
+        assert_eq!(x_mtz, Mutez::from_i64(x));
     }
 }
 
