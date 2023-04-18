@@ -138,7 +138,7 @@ pub mod listings {
 
     use tedium::Decode;
 
-    use crate::core::{Mutez, PublicKeyHashV0};
+    use crate::core::{mutez::Mutez, PublicKeyHashV0};
 
     #[derive(Clone, Copy, Debug, Decode)]
     struct RawItem(pub PublicKeyHashV0, pub Mutez);

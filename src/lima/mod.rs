@@ -1,9 +1,9 @@
-use tezos_codegen::proto015_ptlimapt::{baking_rights, block_info, constants};
+use tezos_codegen::proto015_ptlimapt::{ baking_rights, block_info, constants };
 
 pub mod error {
     use std::convert::Infallible;
 
-    use crate::core::{ballot::InvalidBallotError, InvalidDiscriminantError, VotingPeriodKind};
+    use crate::core::{ ballot::InvalidBallotError, InvalidDiscriminantError, VotingPeriodKind };
 
     #[derive(Debug)]
     pub enum LimaConversionError {
@@ -43,7 +43,8 @@ pub mod error {
 
     impl From<Infallible> for LimaConversionError {
         fn from(value: Infallible) -> Self {
-            match value {}
+            match value {
+            }
         }
     }
 }
@@ -95,7 +96,7 @@ pub mod raw {
     pub use tezos_codegen::proto015_ptlimapt::constants;
     pub use tezos_codegen::proto015_ptlimapt::level;
 
-    pub(crate) use block_info::{BlockHeaderMetadata, Operation, RawBlockHeader};
+    pub(crate) use block_info::{ BlockHeaderMetadata, Operation, RawBlockHeader };
 
     pub type BlockInfo = block_info::Proto015PtLimaPtBlockInfo;
     pub type OperationResult =
@@ -140,27 +141,49 @@ pub mod api {
         raw::{
             self,
             block_info::{
-                OperationDenestDyn, Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
+                proto015ptlimaptcontractid::Originated,
+                OperationDenestDyn,
+                Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
                 Proto015PtLimaPtOperationAlphaContents,
                 Proto015PtLimaPtOperationAlphaOperationContentsAndResult,
                 Proto015PtLimaPtOperationAlphaOperationWithMetadata,
             },
         },
     };
-    use num_bigint::{BigInt, BigUint};
-    use tedium::{u30, Dynamic, Sequence};
-    use tezos_codegen::proto015_ptlimapt::constants::{
-        Proto015PtLimaPtConstantsMinimalParticipationRatio,
-        Proto015PtLimaPtConstantsRatioOfFrozenDepositsSlashedPerDoubleEndorsement,
+    use num::ToPrimitive;
+    use num_bigint::{ BigInt, BigUint };
+    use serde::ser::SerializeStruct;
+    use tedium::{ u30, Dynamic, Sequence };
+    use tezos_codegen::proto015_ptlimapt::{
+        block_info::{
+            proto015ptlimaptcontractid::Implicit,
+            Proto015PtLimaPtContractId,
+            Proto015PtLimaPtEntrypoint,
+        },
+        constants::{
+            Proto015PtLimaPtConstantsMinimalParticipationRatio,
+            Proto015PtLimaPtConstantsRatioOfFrozenDepositsSlashedPerDoubleEndorsement,
+        },
     };
 
     use crate::{
         core::{
-            ballot::{self, Ballot, InvalidBallotError},
-            BlockHash, ChainId, InvalidDiscriminantError, NonceHash, ProtocolHash, PublicKeyHashV0,
-            RatioU16, VotingPeriodKind,
+            ballot::{ self, Ballot, InvalidBallotError },
+            mutez::MutezPlus,
+            BlockHash,
+            ChainId,
+            ContractHash,
+            InvalidDiscriminantError,
+            NonceHash,
+            ProtocolHash,
+            PublicKeyHashV0,
+            RatioU16,
+            VotingPeriodKind, ContractId,
+            // Mutez,
+            transaction::Entrypoint,
         },
-        traits::{ContainsBallots, ContainsProposals, Crypto},
+        traits::{ ContainsBallots, ContainsProposals, Crypto },
+        util::abstract_unpack_dynseq,
     };
 
     /// Cross-module canonical type for Lima `block_info` values
@@ -174,17 +197,14 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaBlockInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-        where
-            Self: Sized,
-        {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
             let raw: raw::BlockInfo = raw::BlockInfo::parse(p)?;
             Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
     }
 
     fn unpack_block_operations(
-        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>,
+        operations: Dynamic<u30, Sequence<Dynamic<u30, Dynamic<u30, Sequence<raw::Operation>>>>>
     ) -> Result<Vec<Vec<LimaOperation>>, LimaConversionError> {
         operations
             .into_inner()
@@ -207,8 +227,7 @@ pub mod api {
                 chain_id: ChainId::from_fixed_bytes(value.chain_id.chain_id),
                 hash: BlockHash::from(value.hash.block_hash),
                 header: LimaBlockHeader::from(value.header.into_inner()),
-                metadata: value
-                    .metadata
+                metadata: value.metadata
                     .map(|x| LimaMetadata::try_from(x.into_inner()))
                     .transpose()?,
                 operations: unpack_block_operations(value.operations)?,
@@ -220,9 +239,7 @@ pub mod api {
         type ProposalsType = LimaProposals;
 
         fn has_proposals(&self) -> bool {
-            self.operations
-                .iter()
-                .any(|ops| ops.iter().any(|op| op.has_proposals()))
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_proposals()))
         }
 
         fn count_proposals(&self) -> usize {
@@ -238,16 +255,15 @@ pub mod api {
         type BallotType = LimaBallot;
 
         fn has_ballots(&self) -> bool {
-            self.operations
-                .iter()
-                .any(|ops| ops.iter().any(|op| op.has_ballots()))
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
         }
 
         fn count_ballots(&self) -> usize {
-            self.operations.iter().fold(0usize, |major, ops| {
-                ops.iter()
-                    .fold(major, |minor, op| minor + op.count_ballots())
-            })
+            self.operations
+                .iter()
+                .fold(0usize, |major, ops| {
+                    ops.iter().fold(major, |minor, op| minor + op.count_ballots())
+                })
         }
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
@@ -352,25 +368,24 @@ pub mod api {
                 timestamp: crate::core::Timestamp::from_i64(value.timestamp),
                 validation_pass: value.validation_pass,
                 operations_hash: crate::core::OperationListListHash::from_fixed_bytes(
-                    value.operations_hash.operation_list_list_hash,
+                    value.operations_hash.operation_list_list_hash
                 ),
-                fitness: value
-                    .fitness
+                fitness: value.fitness
                     .into_inner()
                     .into_iter()
                     .map(|elt| elt.into_inner())
                     .collect(),
                 context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
                 payload_hash: crate::core::ValueHash::from_fixed_bytes(
-                    value.payload_hash.value_hash,
+                    value.payload_hash.value_hash
                 ),
                 payload_round: value.payload_round,
                 proof_of_work_nonce: LimaProofOfWorkNonce::from_fixed_bytes(
-                    value.proof_of_work_nonce,
+                    value.proof_of_work_nonce
                 ),
-                seed_nonce_hash: value
-                    .seed_nonce_hash
-                    .map(|nonce| crate::core::NonceHash::from_fixed_bytes(nonce.cycle_nonce)),
+                seed_nonce_hash: value.seed_nonce_hash.map(|nonce|
+                    crate::core::NonceHash::from_fixed_bytes(nonce.cycle_nonce)
+                ),
                 liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
                 signature: crate::core::SignatureV0::from_fixed_bytes(value.signature.signature_v0),
             }
@@ -387,13 +402,10 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaVotingPeriodInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-        where
-            Self: Sized,
-        {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
             let raw =
                 raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo::parse(
-                    p,
+                    p
                 )?;
             Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
@@ -414,12 +426,11 @@ pub mod api {
     }
 
     impl TryFrom<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo>
-        for LimaVotingPeriodInfo
-    {
+    for LimaVotingPeriodInfo {
         type Error = InvalidDiscriminantError<VotingPeriodKind>;
 
         fn try_from(
-            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo,
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfo
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 voting_period: value.voting_period.try_into()?,
@@ -434,7 +445,9 @@ pub mod api {
             write!(
                 f,
                 "{{ voting_period: {}, position: {}, remaining: {} }}",
-                self.voting_period, self.position, self.remaining
+                self.voting_period,
+                self.position,
+                self.remaining
             )
         }
     }
@@ -465,7 +478,9 @@ pub mod api {
             write!(
                 f,
                 "{{ index: {}, kind: {}, start_position: {} }}",
-                self.index, self.kind, self.start_position
+                self.index,
+                self.kind,
+                self.start_position
             )
         }
     }
@@ -482,15 +497,12 @@ pub mod api {
         }
     }
 
-    impl
-        TryFrom<
-            raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
-        > for LimaVotingPeriod
-    {
+    impl TryFrom<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod>
+    for LimaVotingPeriod {
         type Error = InvalidDiscriminantError<VotingPeriodKind>;
 
         fn try_from(
-            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
+            value: raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 index: value.index,
@@ -508,21 +520,16 @@ pub mod api {
         max_operations_ttl: i32,
         max_operation_data_length: i32,
         max_block_header_length: i32,
-        max_operation_list_length: Vec<
-            raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq,
-        >,
+        max_operation_list_length: Vec<raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq>,
         proposer: PublicKeyHashV0,
         baker: PublicKeyHashV0,
         level_info: LimaLevelInfo,
         voting_period_info: LimaVotingPeriodInfo,
         nonce_hash: Option<NonceHash>,
-        deactivated: Vec<
-            raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq,
-        >,
+        deactivated: Vec<raw::block_info::Proto015PtLimaPtBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq>,
         balance_updates: Vec<raw::block_info::Proto015PtLimaPtOperationMetadataAlphaBalance>,
         liquidity_baking_toggle_ema: i32,
-        implicit_operations_results:
-            Vec<raw::block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult>,
+        implicit_operations_results: Vec<raw::block_info::Proto015PtLimaPtOperationAlphaSuccessfulManagerOperationResult>,
         proposer_consensus_key: PublicKeyHashV0,
         baker_consensus_key: PublicKeyHashV0,
         consumed_milligas: BigUint,
@@ -545,7 +552,7 @@ pub mod api {
                 max_operation_data_length: value.max_operation_data_length.to_i32(),
                 max_block_header_length: value.max_block_header_length.to_i32(),
                 max_operation_list_length: Sequence::into_inner(
-                    value.max_operation_list_length.into_inner().into_inner(),
+                    value.max_operation_list_length.into_inner().into_inner()
                 ),
                 proposer: value.proposer.signature_v0_public_key_hash.into(),
                 baker: value.baker.signature_v0_public_key_hash.into(),
@@ -555,21 +562,13 @@ pub mod api {
                 deactivated: value.deactivated.into_inner().into_inner(),
                 balance_updates: value.balance_updates.into_inner().into_inner(),
                 liquidity_baking_toggle_ema: value.liquidity_baking_toggle_ema,
-                implicit_operations_results: value
-                    .implicit_operations_results
+                implicit_operations_results: value.implicit_operations_results
                     .into_inner()
                     .into_inner(),
-                proposer_consensus_key: value
-                    .proposer_consensus_key
-                    .signature_v0_public_key_hash
-                    .into(),
-                baker_consensus_key: value
-                    .baker_consensus_key
-                    .signature_v0_public_key_hash
-                    .into(),
+                proposer_consensus_key: value.proposer_consensus_key.signature_v0_public_key_hash.into(),
+                baker_consensus_key: value.baker_consensus_key.signature_v0_public_key_hash.into(),
                 consumed_milligas: value.consumed_milligas.into_inner(),
-                dal_slot_availability: value
-                    .dal_slot_availability
+                dal_slot_availability: value.dal_slot_availability
                     .into_inner()
                     .map(tedium::Z::into_inner),
             })
@@ -577,7 +576,7 @@ pub mod api {
     }
 
     fn unpack_metadata_nonce_hash(
-        value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash,
+        value: Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash
     ) -> Option<NonceHash> {
         match value {
             Proto015PtLimaPtBlockHeaderAlphaMetadataNonceHash::None(_) => None,
@@ -675,11 +674,13 @@ pub mod api {
 
         #[test]
         fn test_has_proposals() {
-            let should_have = mock_operation(LimaOperationContents::Proposals(LimaProposals {
-                source: PublicKeyHashV0::Ed25519(FixedBytes::from_array([0u8; 20])),
-                period: 12,
-                proposals: vec![crate::core::ProtocolHash::from_byte_array([0u8; 32])],
-            }));
+            let should_have = mock_operation(
+                LimaOperationContents::Proposals(LimaProposals {
+                    source: PublicKeyHashV0::Ed25519(FixedBytes::from_array([0u8; 20])),
+                    period: 12,
+                    proposals: vec![crate::core::ProtocolHash::from_byte_array([0u8; 32])],
+                })
+            );
             assert!(should_have.has_proposals());
         }
     }
@@ -772,14 +773,10 @@ pub mod api {
 
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } => contents
-                    .iter()
-                    .flat_map(ContainsBallots::get_ballots)
-                    .collect(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
-                    .iter()
-                    .flat_map(ContainsBallots::get_ballots)
-                    .collect(),
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
             }
         }
     }
@@ -800,27 +797,19 @@ pub mod api {
 
         fn count_proposals(&self) -> usize {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } => contents
-                    .iter()
-                    .map(ContainsProposals::count_proposals)
-                    .sum(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
-                    .iter()
-                    .map(ContainsProposals::count_proposals)
-                    .sum(),
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().map(ContainsProposals::count_proposals).sum(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().map(ContainsProposals::count_proposals).sum(),
             }
         }
 
         fn get_proposals(&self) -> Vec<Self::ProposalsType> {
             match self {
-                LimaOperationContainer::WithMetadata { contents, .. } => contents
-                    .iter()
-                    .flat_map(ContainsProposals::get_proposals)
-                    .collect(),
-                LimaOperationContainer::WithoutMetadata { contents, .. } => contents
-                    .iter()
-                    .flat_map(ContainsProposals::get_proposals)
-                    .collect(),
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsProposals::get_proposals).collect(),
             }
         }
     }
@@ -842,11 +831,7 @@ pub mod api {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "Account `")?;
             self.source.base58check_fmt(f)?;
-            writeln!(
-                f,
-                "` proposed the following protocols during period {}:",
-                self.period
-            )?;
+            writeln!(f, "` proposed the following protocols during period {}:", self.period)?;
             for proposal in self.proposals.iter() {
                 writeln!(f, "\t")?;
                 proposal.base58check_fmt(f)?;
@@ -874,8 +859,7 @@ pub mod api {
             Self {
                 source: value.source.signature_v0_public_key_hash.into(),
                 period: value.period,
-                proposals: value
-                    .proposals
+                proposals: value.proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -889,8 +873,7 @@ pub mod api {
             Self {
                 source: value.source.signature_v0_public_key_hash.into(),
                 period: value.period,
-                proposals: value
-                    .proposals
+                proposals: value.proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -899,12 +882,299 @@ pub mod api {
         }
     }
 
+    pub type LimaContractId = crate::core::ContractId<PublicKeyHashV0>;
+
+    impl From<Proto015PtLimaPtContractId> for LimaContractId {
+        fn from(value: Proto015PtLimaPtContractId) -> Self {
+            match value {
+                Proto015PtLimaPtContractId::Implicit(Implicit { signature_v0_public_key_hash }) =>
+                    Self::Implicit(PublicKeyHashV0::from(signature_v0_public_key_hash)),
+                Proto015PtLimaPtContractId::Originated(Originated(ct_padded)) => {
+                    Self::Originated(ContractHash::from(ct_padded.into_inner().contract_hash))
+                }
+            }
+        }
+    }
+
+    impl serde::Serialize for LimaContractId {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+            if serializer.is_human_readable() {
+                serializer.serialize_str(&self.to_base58check())
+            } else {
+                match self {
+                    LimaContractId::Implicit(pkh) => {
+                        serializer.serialize_newtype_variant("ContractId", 0, "Implicit", pkh)
+                    }
+                    LimaContractId::Originated(ch) => {
+                        serializer.serialize_newtype_variant("ContractId", 1, "Originated", ch)
+                    }
+                }
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Hash)]
+    pub struct LimaTransaction {
+        source: PublicKeyHashV0,
+        fee: MutezPlus,
+        counter: BigUint,
+        gas_limit: BigUint,
+        storage_limit: BigUint,
+        amount: MutezPlus,
+        destination: LimaContractId,
+        parameters: Option<LimaTransactionParameters>,
+        metadata: Option<LimaTransactionMetadata>,
+    }
+
+    impl serde::Serialize for LimaTransaction {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+            let mut s = serializer.serialize_struct("LimaTransaction", 8)?;
+            s.serialize_field("source", &self.source)?;
+            s.serialize_field("fee", &self.fee)?;
+            if let Some(ref ctr) = self.counter.to_u128() {
+                s.serialize_field("counter", ctr)?;
+            } else {
+                s.serialize_field("counter", &self.counter.to_u64_digits())?;
+            }
+            if let Some(ref l_gas) = self.gas_limit.to_u128() {
+                s.serialize_field("gas_limit", l_gas)?;
+            } else {
+                s.serialize_field("gas_limit", &self.gas_limit.to_u64_digits())?;
+            }
+            if let Some(ref l_storage) = self.storage_limit.to_u128() {
+                s.serialize_field("storage_limit", l_storage)?;
+            } else {
+                s.serialize_field("storage_limit", &self.storage_limit.to_u64_digits())?;
+            }
+            s.serialize_field("amount", &self.amount)?;
+            s.serialize_field("destination", &self.destination)?;
+            s.serialize_field("parameters", &self.parameters)?;
+            // s.serialize_field("metadata", &self.metadata)?;
+            s.end()
+        }
+    }
+
+    impl From<raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResultTransactionMetadata>
+    for LimaTransactionMetadata {
+        fn from(
+            value: raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResultTransactionMetadata
+        ) -> Self {
+            Self {
+                balance_updates: abstract_unpack_dynseq(value.balance_updates),
+                operation_result: value.operation_result.into(),
+                internal_operation_results: abstract_unpack_dynseq(
+                    value.internal_operation_results
+                ),
+            }
+        }
+    }
+
+
+    // #[repr(u8)]
+    // #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+    // pub(crate) enum UpdateOrigin  {
+    //     BlockApplication = 0,
+    //     ProtocolMigration = 1,
+    //     Subsidy = 2,
+    //     Simulation = 3,
+    // }
+
+
+
+
+    // // TODO[epic=facade]
+    // #[derive(Clone, Debug, PartialEq, Hash, Serialize)]
+    // pub enum LimaBalanceUpdate {
+    //    Contract  { contract: LimaContractId, change: Mutez, origin: UpdateOrigin },
+    //    BlockFees  { change: Mutez, origin: UpdateOrigin },
+    //    Deposits  { delegate: PublicKeyHashV0, change: Mutez, origin: UpdateOrigin },
+    //    NonceRevelationRewards  { change: Mutez, origin: UpdateOrigin },
+    //    DoubleSigningEvidenceRewards { change: Mutez, origin: UpdateOrigin },
+    //    EndorsingRewards { change: Mutez, origin: UpdateOrigin },
+    //    BakingRewards  { change: Mutez, origin: UpdateOrigin },
+    //    BakingBonuses  { change: Mutez, origin: UpdateOrigin },
+    //    StorageFees  { change: Mutez, origin: UpdateOrigin },
+    //    DoubleSigningPunishments  { change: Mutez, origin: UpdateOrigin },
+    //    LostEndorsingRewards  { delegate: PublicKeyHashV0, participation: bool, revelation: bool, change: Mutez, origin: UpdateOrigin },
+    //    LiquidityBakingSubsidies  { change: Mutez, origin: UpdateOrigin },
+    //    Burned  { change: Mutez, origin: UpdateOrigin },
+    //    Commitments  { committer: Proto015PtLimaPtOperationMetadataAlphaBalanceCommitmentsCommitter, pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    Bootstrap  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    Invoice  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    InitialCommitments  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    Minted  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    Frozen_bonds  { pub contract: Proto015PtLimaPtContractId, pub bond_id: Proto015PtLimaPtBondId, pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    TxRollupRejectionRewards  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    TxRollupRejectionPunishments  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    ScRollupRefutationPunishments  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    //    ScRollupRefutationRewards  { pub change: i64, pub origin: Proto015PtLimaPtOperationMetadataAlphaUpdateOriginOrigin },
+    // }
+
+    type RawBalanceUpdate = raw::block_info::Proto015PtLimaPtOperationMetadataAlphaBalance;
+    // TODO[epic=facade] - pick up facading of LimaBalanceUpdate/
+    pub type LimaBalanceUpdate = RawBalanceUpdate;
+
+    // TODO[epic=facade]
+    pub type LimaTransactionResult =
+        raw::block_info::Proto015PtLimaPtOperationAlphaOperationResultTransaction;
+
+    // TODO[epic=facade]
+    pub type LimaInternalOperationResult =
+        raw::block_info::Proto015PtLimaPtApplyInternalResultsAlphaOperationResult;
+
+    #[derive(Clone, Debug, PartialEq, Hash)]
+    #[cfg_attr(never, derive(Serialize))]
+    pub struct LimaTransactionMetadata {
+        balance_updates: Vec<LimaBalanceUpdate>,
+        operation_result: LimaTransactionResult,
+        internal_operation_results: Vec<LimaInternalOperationResult>,
+    }
+
+    impl LimaTransactionMetadata {
+        pub fn balance_updates(&self) -> &[LimaBalanceUpdate] {
+            self.balance_updates.as_ref()
+        }
+
+        pub fn operation_result(&self) -> &LimaTransactionResult {
+            &self.operation_result
+        }
+
+        pub fn internal_operation_results(&self) -> &[LimaInternalOperationResult] {
+            self.internal_operation_results.as_ref()
+        }
+    }
+
+    pub type RawLimaTransaction = raw::block_info::proto015ptlimaptoperationalphacontents::Transaction;
+
+    impl tedium::Decode for LimaTransaction {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            let raw = RawLimaTransaction::parse(p)?;
+            Ok(raw.into())
+        }
+    }
+
+    impl LimaTransaction {
+        pub fn source(&self) -> PublicKeyHashV0 {
+            self.source
+        }
+
+        pub fn fee(&self) -> &MutezPlus {
+            &self.fee
+        }
+
+        pub fn amount(&self) -> &MutezPlus {
+            &self.amount
+        }
+
+        pub fn destination(&self) -> LimaContractId {
+            self.destination
+        }
+
+        pub fn parameters(&self) -> Option<&LimaTransactionParameters> {
+            self.parameters.as_ref()
+        }
+
+        pub fn counter(&self) -> &BigUint {
+            &self.counter
+        }
+
+        pub fn storage_limit(&self) -> &BigUint {
+            &self.storage_limit
+        }
+
+        pub fn gas_limit(&self) -> &BigUint {
+            &self.gas_limit
+        }
+    }
+
+    impl From<raw::block_info::proto015ptlimaptoperationalphacontents::Transaction>
+    for LimaTransaction {
+        fn from(
+            value: raw::block_info::proto015ptlimaptoperationalphacontents::Transaction
+        ) -> Self {
+            Self {
+                source: PublicKeyHashV0::from(value.source.signature_v0_public_key_hash),
+                fee: MutezPlus::from_biguint(value.fee.into_inner()),
+                counter: value.counter.into_inner(),
+                gas_limit: value.gas_limit.into_inner(),
+                storage_limit: value.storage_limit.into_inner(),
+                amount: MutezPlus::from_biguint(value.amount.into_inner()),
+                destination: ContractId::from(value.destination),
+                parameters: value.parameters.map(|params| params.into()),
+                metadata: None,
+            }
+        }
+    }
+
+    impl From<raw::block_info::proto015ptlimaptoperationalphaoperationcontentsandresult::Transaction>
+    for LimaTransaction {
+        fn from(
+            value: raw::block_info::proto015ptlimaptoperationalphaoperationcontentsandresult::Transaction
+        ) -> Self {
+            Self {
+                source: PublicKeyHashV0::from(value.source.signature_v0_public_key_hash),
+                fee: MutezPlus::from_biguint(value.fee.into_inner()),
+                counter: value.counter.into_inner(),
+                gas_limit: value.gas_limit.into_inner(),
+                storage_limit: value.storage_limit.into_inner(),
+                amount: MutezPlus::from_biguint(value.amount.into_inner()),
+                destination: ContractId::from(value.destination),
+                parameters: value.parameters.map(|params| params.into()),
+                metadata: Some(value.metadata.into()),
+            }
+        }
+    }
+
+    impl From<Proto015PtLimaPtEntrypoint> for Entrypoint {
+        fn from(value: Proto015PtLimaPtEntrypoint) -> Self {
+            match value {
+                Proto015PtLimaPtEntrypoint::default(_) => Self::Default,
+                Proto015PtLimaPtEntrypoint::root(_) => Self::Root,
+                Proto015PtLimaPtEntrypoint::r#do(_) => Self::Do,
+                Proto015PtLimaPtEntrypoint::set_delegate(_) => Self::SetDelegate,
+                Proto015PtLimaPtEntrypoint::remove_delegate(_) => Self::RemoveDelegate,
+                Proto015PtLimaPtEntrypoint::deposit(_) => Self::Deposit,
+                Proto015PtLimaPtEntrypoint::named(s) => Self::Named(s.0.into_inner()),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Hash, Serialize)]
+    pub struct LimaTransactionParameters {
+        entrypoint: Entrypoint,
+        value: tedium::Bytes,
+    }
+
+    impl From<raw::block_info::Proto015PtLimaPtOperationAlphaContentsTransactionParameters>
+    for LimaTransactionParameters {
+        fn from(
+            value: raw::block_info::Proto015PtLimaPtOperationAlphaContentsTransactionParameters
+        ) -> Self {
+            Self {
+                entrypoint: value.entrypoint.into(),
+                value: value.value.into_inner(),
+            }
+        }
+    }
+
+    impl From<raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResultTransactionParameters>
+    for LimaTransactionParameters {
+        fn from(
+            value: raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResultTransactionParameters
+        ) -> Self {
+            Self {
+                entrypoint: value.entrypoint.into(),
+                value: value.value.into_inner(),
+            }
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq, Hash)]
     #[non_exhaustive]
-    /// TODO - include distinction of Proposals operation
     pub enum LimaOperationContents {
         Ballot(LimaBallot),
         Proposals(LimaProposals),
+        Transaction(LimaTransaction),
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaContents),
     }
 
@@ -919,6 +1189,9 @@ pub mod api {
                 Proto015PtLimaPtOperationAlphaContents::Proposals(proposals) => {
                     Ok(Self::Proposals(LimaProposals::from(proposals)))
                 }
+                Proto015PtLimaPtOperationAlphaContents::Transaction(transaction) => {
+                    Ok(Self::Transaction(LimaTransaction::from(transaction)))
+                }
                 _other => Ok(Self::Raw(_other)),
             }
         }
@@ -929,6 +1202,7 @@ pub mod api {
     pub enum LimaOperationContentsAndResult {
         Ballot(LimaBallot),
         Proposals(LimaProposals),
+        Transaction(LimaTransaction),
         Raw(super::raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResult),
     }
 
@@ -943,6 +1217,9 @@ pub mod api {
                 Proto015PtLimaPtOperationAlphaOperationContentsAndResult::Proposals(proposals) => {
                     Ok(Self::Proposals(LimaProposals::from(proposals)))
                 }
+                Proto015PtLimaPtOperationAlphaOperationContentsAndResult::Transaction(
+                    transaction,
+                ) => Ok(Self::Transaction(LimaTransaction::from(transaction))),
                 other => Ok(Self::Raw(other)),
             }
         }
@@ -996,7 +1273,7 @@ pub mod api {
     type RawOpContentsAndResult = Proto015PtLimaPtOperationAlphaOperationContentsAndResult;
 
     fn unpack_operation_contents(
-        contents: Sequence<RawOpContents>,
+        contents: Sequence<RawOpContents>
     ) -> Result<Vec<LimaOperationContents>, InvalidBallotError> {
         contents
             .into_iter()
@@ -1005,7 +1282,7 @@ pub mod api {
     }
 
     fn unpack_operation_contents_and_result(
-        contents: Sequence<RawOpContentsAndResult>,
+        contents: Sequence<RawOpContentsAndResult>
     ) -> Result<Vec<LimaOperationContentsAndResult>, InvalidBallotError> {
         contents
             .into_iter()
@@ -1017,7 +1294,7 @@ pub mod api {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::OperationDenestDyn,
+            value: super::raw::block_info::OperationDenestDyn
         ) -> Result<Self, Self::Error> {
             match value {
                 OperationDenestDyn::Operation_with_too_large_metadata(
@@ -1025,19 +1302,21 @@ pub mod api {
                         contents,
                         signature,
                     },
-                ) => Ok(Self::WithoutMetadata {
-                    contents: unpack_operation_contents(contents)?,
-                    signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                }),
+                ) =>
+                    Ok(Self::WithoutMetadata {
+                        contents: unpack_operation_contents(contents)?,
+                        signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
+                    }),
                 OperationDenestDyn::Operation_without_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_without_metadata {
                         contents,
                         signature,
                     },
-                ) => Ok(Self::WithoutMetadata {
-                    contents: unpack_operation_contents(contents)?,
-                    signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
-                }),
+                ) =>
+                    Ok(Self::WithoutMetadata {
+                        contents: unpack_operation_contents(contents)?,
+                        signature: Some(crate::core::SignatureV0::from(signature.signature_v0)),
+                    }),
                 OperationDenestDyn::Operation_with_metadata(
                     super::raw::block_info::operationdenestdyn::Operation_with_metadata(inner),
                 ) => {
@@ -1094,7 +1373,7 @@ pub mod api {
             source: PublicKeyHashV0,
             period: i32,
             proposal: ProtocolHash,
-            ballot: Ballot,
+            ballot: Ballot
         ) -> Self {
             Self {
                 source,
@@ -1147,16 +1426,15 @@ pub mod api {
     }
 
     impl TryFrom<super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot>
-        for LimaBallot
-    {
+    for LimaBallot {
         type Error = ballot::InvalidBallotError;
 
         fn try_from(
-            value: super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot,
+            value: super::raw::block_info::proto015ptlimaptoperationalphacontents::Ballot
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: crate::core::PublicKeyHashV0::from(
-                    value.source.signature_v0_public_key_hash,
+                    value.source.signature_v0_public_key_hash
                 ),
                 period: value.period,
                 proposal: crate::core::ProtocolHash::from(value.proposal.protocol_hash),
@@ -1264,10 +1542,16 @@ pub mod api {
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match &self.operation.operation {
                 LimaOperationContainer::WithMetadata { contents, .. } => {
-                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                    contents
+                        .iter()
+                        .flat_map(|op| op.get_ballots())
+                        .collect()
                 }
                 LimaOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents.iter().flat_map(|op| op.get_ballots()).collect()
+                    contents
+                        .iter()
+                        .flat_map(|op| op.get_ballots())
+                        .collect()
                 }
             }
         }
@@ -1286,10 +1570,16 @@ pub mod api {
         fn count_ballots(&self) -> usize {
             match &self.operation.operation {
                 LimaOperationContainer::WithMetadata { contents, .. } => {
-                    contents.iter().map(|op| op.count_ballots()).sum()
+                    contents
+                        .iter()
+                        .map(|op| op.count_ballots())
+                        .sum()
                 }
                 LimaOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents.iter().map(|op| op.count_ballots()).sum()
+                    contents
+                        .iter()
+                        .map(|op| op.count_ballots())
+                        .sum()
                 }
             }
         }
@@ -1306,13 +1596,13 @@ pub mod api {
         max_anon_ops_per_block: u8,
         max_operation_data_length: i32, // originally i31
         max_proposals_per_delegate: u8,
-        max_micheline_node_count: i32,           // originally i31
-        max_micheline_bytes_limit: i32,          // originally i31
+        max_micheline_node_count: i32, // originally i31
+        max_micheline_bytes_limit: i32, // originally i31
         max_allowed_global_constants_depth: i32, // originally i31
         cache_layout_size: u8,
         michelson_maximum_type_size: u16,
         sc_max_wrapped_proof_binary_size: i32, // originally ::tedium::i31,
-        sc_rollup_message_size_limit: i32,     // originally ::tedium::i31,
+        sc_rollup_message_size_limit: i32, // originally ::tedium::i31,
         preserved_cycles: u8,
         blocks_per_cycle: i32,
         blocks_per_commitment: i32,
@@ -1320,7 +1610,7 @@ pub mod api {
         blocks_per_stake_snapshot: i32,
         cycles_per_voting_period: i32,
         hard_gas_limit_per_operation: BigInt, // originally ::tedium::Z,
-        hard_gas_limit_per_block: BigInt,     // originally ::tedium::Z,
+        hard_gas_limit_per_block: BigInt, // originally ::tedium::Z,
         proof_of_work_threshold: i64,
         minimal_stake: BigUint, // originally ::tedium::N,
         vdf_difficulty: i64,
@@ -1328,8 +1618,8 @@ pub mod api {
         origination_size: i32,
         baking_reward_fixed_portion: BigUint, // originally ::tedium::N,
         baking_reward_bonus_per_slot: BigUint, // originally ::tedium::N,
-        endorsing_reward_per_slot: BigUint,   // originally ::tedium::N,
-        cost_per_byte: BigUint,               // originally ::tedium::N,
+        endorsing_reward_per_slot: BigUint, // originally ::tedium::N,
+        cost_per_byte: BigUint, // originally ::tedium::N,
         hard_storage_limit_per_operation: BigInt, // originally ::tedium::Z,
         quorum_min: i32,
         quorum_max: i32,
@@ -1340,10 +1630,10 @@ pub mod api {
         minimal_block_delay: i64,
         delay_increment_per_round: i64,
         consensus_committee_size: i32, // originally ::tedium::i31
-        consensus_threshold: i32,      // originally ::tedium::i31
+        consensus_threshold: i32, // originally ::tedium::i31
         minimal_participation_ratio: RatioU16,
-        max_slashing_period: i32,          // originally ::tedium::i31
-        frozen_deposits_percentage: i32,   // originally ::tedium::i31
+        max_slashing_period: i32, // originally ::tedium::i31
+        frozen_deposits_percentage: i32, // originally ::tedium::i31
         double_baking_punishment: BigUint, // originally ::tedium::N
         ratio_of_frozen_deposits_slashed_per_double_endorsement: RatioU16,
         testnet_dictator: Option<PublicKeyHashV0>,
@@ -1427,10 +1717,7 @@ pub mod api {
     }
 
     impl tedium::Decode for LimaConstants {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-        where
-            Self: Sized,
-        {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
             Ok(<super::raw::Constants as tedium::Decode>::parse(p)?.into())
         }
     }
@@ -1462,9 +1749,7 @@ pub mod api {
                 max_proposals_per_delegate: value.max_proposals_per_delegate,
                 max_micheline_node_count: value.max_micheline_node_count.to_i32(),
                 max_micheline_bytes_limit: value.max_micheline_bytes_limit.to_i32(),
-                max_allowed_global_constants_depth: value
-                    .max_allowed_global_constants_depth
-                    .to_i32(),
+                max_allowed_global_constants_depth: value.max_allowed_global_constants_depth.to_i32(),
                 cache_layout_size: value.cache_layout_size,
                 michelson_maximum_type_size: value.michelson_maximum_type_size,
                 sc_max_wrapped_proof_binary_size: value.sc_max_wrapped_proof_binary_size.to_i32(),
@@ -1486,9 +1771,7 @@ pub mod api {
                 baking_reward_bonus_per_slot: value.baking_reward_bonus_per_slot.into_inner(),
                 endorsing_reward_per_slot: value.endorsing_reward_per_slot.into_inner(),
                 cost_per_byte: value.cost_per_byte.into_inner(),
-                hard_storage_limit_per_operation: value
-                    .hard_storage_limit_per_operation
-                    .into_inner(),
+                hard_storage_limit_per_operation: value.hard_storage_limit_per_operation.into_inner(),
                 quorum_min: value.quorum_min,
                 quorum_max: value.quorum_max,
                 min_proposal_quorum: value.min_proposal_quorum,
@@ -1503,67 +1786,42 @@ pub mod api {
                 max_slashing_period: value.max_slashing_period.to_i32(),
                 frozen_deposits_percentage: value.frozen_deposits_percentage.to_i32(),
                 double_baking_punishment: value.double_baking_punishment.into_inner(),
-                ratio_of_frozen_deposits_slashed_per_double_endorsement: value
-                    .ratio_of_frozen_deposits_slashed_per_double_endorsement
-                    .into(),
-                testnet_dictator: value
-                    .testnet_dictator
-                    .map(|x| x.signature_v0_public_key_hash.into()),
+                ratio_of_frozen_deposits_slashed_per_double_endorsement: value.ratio_of_frozen_deposits_slashed_per_double_endorsement.into(),
+                testnet_dictator: value.testnet_dictator.map(|x|
+                    x.signature_v0_public_key_hash.into()
+                ),
                 initial_seed: value.initial_seed.map(|x| x.random.into()),
                 cache_script_size: value.cache_script_size.to_i32(),
                 cache_stake_distribution_cycles: value.cache_stake_distribution_cycles,
                 cache_sampler_state_cycles: value.cache_sampler_state_cycles,
                 tx_rollup_enable: value.tx_rollup_enable,
                 tx_rollup_origination_size: value.tx_rollup_origination_size.to_i32(),
-                tx_rollup_hard_size_limit_per_inbox: value
-                    .tx_rollup_hard_size_limit_per_inbox
-                    .to_i32(),
-                tx_rollup_hard_size_limit_per_message: value
-                    .tx_rollup_hard_size_limit_per_message
-                    .to_i32(),
-                tx_rollup_max_withdrawals_per_batch: value
-                    .tx_rollup_max_withdrawals_per_batch
-                    .to_i32(),
+                tx_rollup_hard_size_limit_per_inbox: value.tx_rollup_hard_size_limit_per_inbox.to_i32(),
+                tx_rollup_hard_size_limit_per_message: value.tx_rollup_hard_size_limit_per_message.to_i32(),
+                tx_rollup_max_withdrawals_per_batch: value.tx_rollup_max_withdrawals_per_batch.to_i32(),
                 tx_rollup_commitment_bond: value.tx_rollup_commitment_bond.into_inner(),
                 tx_rollup_finality_period: value.tx_rollup_finality_period.to_i32(),
                 tx_rollup_withdraw_period: value.tx_rollup_withdraw_period.to_i32(),
                 tx_rollup_max_inboxes_count: value.tx_rollup_max_inboxes_count.to_i32(),
                 tx_rollup_max_messages_per_inbox: value.tx_rollup_max_messages_per_inbox.to_i32(),
                 tx_rollup_max_commitments_count: value.tx_rollup_max_commitments_count.to_i32(),
-                tx_rollup_cost_per_byte_ema_factor: value
-                    .tx_rollup_cost_per_byte_ema_factor
-                    .to_i32(),
+                tx_rollup_cost_per_byte_ema_factor: value.tx_rollup_cost_per_byte_ema_factor.to_i32(),
                 tx_rollup_max_ticket_payload_size: value.tx_rollup_max_ticket_payload_size.to_i32(),
-                tx_rollup_rejection_max_proof_size: value
-                    .tx_rollup_rejection_max_proof_size
-                    .to_i32(),
+                tx_rollup_rejection_max_proof_size: value.tx_rollup_rejection_max_proof_size.to_i32(),
                 tx_rollup_sunset_level: value.tx_rollup_sunset_level,
                 dal_parametric: value.dal_parametric.into(), // TODO: stent this as a scaffolding alias
                 sc_rollup_enable: value.sc_rollup_enable,
                 sc_rollup_origination_size: value.sc_rollup_origination_size.to_i32(),
-                sc_rollup_challenge_window_in_blocks: value
-                    .sc_rollup_challenge_window_in_blocks
-                    .to_i32(),
-                sc_rollup_max_number_of_messages_per_commitment_period: value
-                    .sc_rollup_max_number_of_messages_per_commitment_period
-                    .to_i32(),
+                sc_rollup_challenge_window_in_blocks: value.sc_rollup_challenge_window_in_blocks.to_i32(),
+                sc_rollup_max_number_of_messages_per_commitment_period: value.sc_rollup_max_number_of_messages_per_commitment_period.to_i32(),
                 sc_rollup_stake_amount: value.sc_rollup_stake_amount.into_inner(),
-                sc_rollup_commitment_period_in_blocks: value
-                    .sc_rollup_commitment_period_in_blocks
-                    .to_i32(),
+                sc_rollup_commitment_period_in_blocks: value.sc_rollup_commitment_period_in_blocks.to_i32(),
                 sc_rollup_max_lookahead_in_blocks: value.sc_rollup_max_lookahead_in_blocks,
                 sc_rollup_max_active_outbox_levels: value.sc_rollup_max_active_outbox_levels,
-                sc_rollup_max_outbox_messages_per_level: value
-                    .sc_rollup_max_outbox_messages_per_level
-                    .to_i32(),
-                sc_rollup_number_of_sections_in_dissection: value
-                    .sc_rollup_number_of_sections_in_dissection,
-                sc_rollup_timeout_period_in_blocks: value
-                    .sc_rollup_timeout_period_in_blocks
-                    .to_i32(),
-                sc_rollup_max_number_of_cemented_commitments: value
-                    .sc_rollup_max_number_of_cemented_commitments
-                    .to_i32(),
+                sc_rollup_max_outbox_messages_per_level: value.sc_rollup_max_outbox_messages_per_level.to_i32(),
+                sc_rollup_number_of_sections_in_dissection: value.sc_rollup_number_of_sections_in_dissection,
+                sc_rollup_timeout_period_in_blocks: value.sc_rollup_timeout_period_in_blocks.to_i32(),
+                sc_rollup_max_number_of_cemented_commitments: value.sc_rollup_max_number_of_cemented_commitments.to_i32(),
                 zk_rollup_enable: value.zk_rollup_enable,
                 zk_rollup_origination_size: value.zk_rollup_origination_size.to_i32(),
                 zk_rollup_min_pending_to_process: value.zk_rollup_min_pending_to_process.to_i32(),

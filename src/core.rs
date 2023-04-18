@@ -1,11 +1,12 @@
 pub mod ballot;
+pub mod transaction;
 pub mod base58;
 pub mod rpc;
 
-use std::{fmt::Display, hint::unreachable_unchecked};
+use std::{ fmt::Display, hint::unreachable_unchecked };
 
 use num::rational::Ratio;
-use tedium::{Decode, FixedBytes};
+use tedium::FixedBytes;
 
 #[macro_export]
 macro_rules! boilerplate {
@@ -131,10 +132,7 @@ macro_rules! impl_serde_crypto {
     };
 }
 
-use crate::{
-    impl_crypto_display,
-    traits::{AsPayload, Crypto, DynamicPrefix, StaticPrefix},
-};
+use crate::{ impl_crypto_display, traits::{ AsPayload, Crypto, DynamicPrefix, StaticPrefix } };
 
 boilerplate!(OperationHash = 32);
 impl_crypto_display!(OperationHash);
@@ -186,6 +184,103 @@ impl StaticPrefix for BlockHash {
 }
 
 impl Crypto for BlockHash {}
+
+boilerplate!(ContractHash = 20);
+
+impl ContractHash {
+    /// Preimage of ciphertext prefix `KT1`
+    ///
+    /// ```
+    /// # use tezos_codec::{traits::Crypto, core::ContractHash};
+    /// assert_eq!(ContractHash::from_byte_array([0u8; 20]).to_base58check().chars().take(3).collect::<String>(), "KT1");
+    /// ```
+    pub const BASE58_PREFIX: [u8; 3] = [2, 90, 121];
+}
+
+impl StaticPrefix for ContractHash {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl Crypto for ContractHash {}
+impl_crypto_display!(ContractHash);
+impl_serde_crypto!(ContractHash);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ContractId<Pkh> {
+    Implicit(Pkh),
+    Originated(ContractHash),
+}
+
+mod sealed {
+    pub trait PKHType: crate::traits::Crypto {}
+
+    impl PKHType for super::PublicKeyHashV0 {}
+    impl PKHType for super::PublicKeyHashV1 {}
+}
+
+impl<Pkh: sealed::PKHType> From<Pkh> for ContractId<Pkh> {
+    fn from(value: Pkh) -> Self {
+        Self::Implicit(value)
+    }
+}
+
+impl<Pkh: sealed::PKHType> From<ContractHash> for ContractId<Pkh> {
+    fn from(value: ContractHash) -> Self {
+        Self::Originated(value)
+    }
+}
+
+impl<Pkh: Crypto> ContractId<Pkh> {
+    /// Returns `true` if the contract id is [`Implicit`].
+    ///
+    /// [`Implicit`]: LimaContractId::Implicit
+    #[must_use]
+    pub fn is_implicit(&self) -> bool {
+        matches!(self, Self::Implicit(..))
+    }
+
+    /// Returns `true` if the lima contract id is [`Originated`].
+    ///
+    /// [`Originated`]: LimaContractId::Originated
+    #[must_use]
+    pub fn is_originated(&self) -> bool {
+        matches!(self, Self::Originated(..))
+    }
+
+    pub fn as_implicit(&self) -> Option<&Pkh> {
+        if let Self::Implicit(v) = self { Some(v) } else { None }
+    }
+
+    pub fn as_originated(&self) -> Option<&ContractHash> {
+        if let Self::Originated(v) = self { Some(v) } else { None }
+    }
+}
+
+impl<Pkh: Crypto> std::fmt::Display for ContractId<Pkh> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Self as Crypto>::base58check_fmt(&self, f)
+    }
+}
+
+impl<Pkh: AsPayload> AsPayload for ContractId<Pkh> {
+    fn as_payload(&self) -> &[u8] {
+        match self {
+            ContractId::Implicit(pkh) => pkh.as_payload(),
+            ContractId::Originated(ch) => ch.as_payload(),
+        }
+    }
+}
+
+impl<Pkh: DynamicPrefix> DynamicPrefix for ContractId<Pkh> {
+    fn get_prefix(&self) -> &'static [u8] {
+        match self {
+            ContractId::Implicit(pkh) => pkh.get_prefix(),
+            ContractId::Originated(ch) => ch.get_prefix(),
+        }
+    }
+}
+
+impl<Pkh: Crypto> Crypto for ContractId<Pkh> {}
 
 boilerplate!(ContextHash = 32);
 impl_crypto_display!(ContextHash);
@@ -309,15 +404,17 @@ mod sigv1_impls {
         fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
             match value.len() {
                 96 => unsafe {
-                    let bytes: FixedBytes<96> =
-                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<96> = FixedBytes::try_from_slice(
+                        value.as_ref()
+                    ).unwrap_unchecked();
                     Ok(Self::Bls(bytes))
-                },
+                }
                 64 => unsafe {
-                    let bytes: FixedBytes<64> =
-                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<64> = FixedBytes::try_from_slice(
+                        value.as_ref()
+                    ).unwrap_unchecked();
                     Ok(Self::SigV0(bytes))
-                },
+                }
                 other => Err(InvalidSignatureV1ByteLengthError(other)),
             }
         }
@@ -413,6 +510,27 @@ impl StaticPrefix for SignatureV0 {
 
 impl Crypto for SignatureV0 {}
 
+boilerplate!(BlindedPublicKeyHash = 20);
+
+impl BlindedPublicKeyHash {
+    /// Preimage of ciphertext preimage "btz1"
+    ///
+    /// ```
+    /// # use tezos_codec::core::BlindedPublicKeyHash;
+    /// # use tezos_codec::traits::Crypto;
+    /// let bpkh = BlindedPublicKeyHash::from_byte_array([0u8; 20]);
+    /// let image : String = bpkh.to_base58check();
+    /// assert_eq!(&bpkh[0..4], "btz1")
+    /// ```
+    pub const BASE58_PREFIX: [u8; 4] = [1, 2, 49, 223];
+}
+
+impl crate::traits::StaticPrefix for BlindedPublicKeyHash {
+    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
+}
+
+impl Crypto for BlindedPublicKeyHash {}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
@@ -470,10 +588,7 @@ impl std::hash::Hash for PublicKeyHashV0 {
 }
 
 impl tedium::Decode for PublicKeyHashV0 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-    where
-        Self: Sized,
-    {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
         let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -491,10 +606,7 @@ impl PublicKeyHashV0 {
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -503,7 +615,7 @@ impl serde::Serialize for PublicKeyHashV0 {
                 "PublicKeyHashV0",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload(),
+                self.as_payload()
             )
         }
     }
@@ -580,10 +692,7 @@ pub struct UnsupportedAlgorithmError(());
 
 impl std::fmt::Display for UnsupportedAlgorithmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "cannot downcast: cryptographic algorithm unsupported in target type"
-        )
+        write!(f, "cannot downcast: cryptographic algorithm unsupported in target type")
     }
 }
 
@@ -675,10 +784,7 @@ impl std::hash::Hash for PublicKeyHashV1 {
 }
 
 impl tedium::Decode for PublicKeyHashV1 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-    where
-        Self: Sized,
-    {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
         let tag = p.take_tagword::<PublicKeyHashV1, u8, _>(&[0, 1, 2, 3])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -695,10 +801,7 @@ impl PublicKeyHashV1 {
 }
 
 impl serde::Serialize for PublicKeyHashV1 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -707,7 +810,7 @@ impl serde::Serialize for PublicKeyHashV1 {
                 "PublicKeyHashV1",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload(),
+                self.as_payload()
             )
         }
     }
@@ -797,146 +900,305 @@ impl std::borrow::Borrow<i64> for Timestamp {
     }
 }
 
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
-pub struct Mutez(i64);
+pub mod mutez {
+    use std::fmt::Display;
 
-impl Decode for Mutez {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(i64::parse(p)?.into())
+    use num::{ Integer, ToPrimitive };
+    use num_bigint::BigUint;
+    use serde::ser::SerializeTuple;
+    use tedium::Decode;
+
+    #[repr(transparent)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
+    pub struct Mutez(i64);
+
+    impl Mutez {
+        pub const PRECISION: u64 = 1_000_000;
+
+        pub const fn to_i64(&self) -> i64 {
+            self.0
+        }
+
+        pub const fn from_i64(mutez: i64) -> Self {
+            Self(mutez)
+        }
+
+        /// Partitions a [`Mutez`] around the logical decimal point in its xtz value,
+        /// returning the signed number of tez followed by the unsigned mantissa.
+        pub const fn to_parts(&self) -> (i64, u64) {
+            let abs = self.0.unsigned_abs();
+            let mantissa = abs.rem_euclid(Self::PRECISION);
+            let radix = self.0.wrapping_div(Self::PRECISION as i64);
+            (radix, mantissa)
+        }
+
+        /// Returns a string representation of the decimal value of this [`Mutez`] instance,
+        /// with an implicit unit of `tez`.
+        ///
+        /// The numeric formatting is done using the standard Display for integers, and so it will
+        /// not include any separators between digits. For more readable or otherwise more customizable
+        /// formatting, see [`format_parts`].
+        pub fn to_xtz_string(&self) -> String {
+            let (radix, mantissa) = self.to_parts();
+            format!("{radix}.{mantissa}")
+        }
+
+        /// Calls an arbitrary function that maps the radix and mantissa of a [`Mutez`] instance
+        /// into a formatted string.
+        ///
+        /// This function is provided as a convenience for end-users who want more control over
+        /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
+        /// traits implementations, or the [`to_xtz_string`] associated method.
+        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(i64, u64) -> String {
+            let (radix, mantissa) = self.to_parts();
+            f(radix, mantissa)
+        }
+
+        pub fn to_tez_lossy(&self) -> f64 {
+            let val = self.0 as f64;
+            val / (Self::PRECISION as f64)
+        }
+    }
+
+    impl From<i64> for Mutez {
+        fn from(value: i64) -> Self {
+            Self(value)
+        }
+    }
+
+    impl std::ops::Add for Mutez {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            Self(self.0 + rhs.0)
+        }
+    }
+
+    impl std::ops::AddAssign for Mutez {
+        fn add_assign(&mut self, rhs: Self) {
+            self.0 += rhs.0;
+        }
+    }
+
+    impl std::ops::Add<i64> for Mutez {
+        type Output = Self;
+
+        fn add(self, rhs: i64) -> Self::Output {
+            Self(self.0 + rhs)
+        }
+    }
+
+    impl Display for Mutez {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} μtz", self.0)
+        }
+    }
+
+    impl Decode for Mutez {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            Ok(i64::parse(p)?.into())
+        }
+    }
+
+    impl tedium::conv::len::FixedLength for Mutez {
+        const LEN: usize = <i64 as tedium::conv::len::FixedLength>::LEN;
+    }
+
+    #[repr(transparent)]
+    #[derive(Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct MutezPlus(BigUint);
+
+    impl From<BigUint> for MutezPlus {
+        fn from(value: BigUint) -> Self {
+            Self(value)
+        }
+    }
+
+    mod _impls {
+        use num_bigint::BigUint;
+
+        macro_rules! impl_from_integral {
+            (@ from $($t:ident),+ $(,)?) => {
+                $(
+                    impl From<$t> for $crate::core::mutez::MutezPlus {
+                        fn from(value: $t) -> Self {
+                            Self::from_biguint(BigUint::from(value))
+                        }
+                    }
+                )+
+            };
+            (@ tryfrom $($t:ident),+ $(,)?) => {
+               $(
+                    impl TryFrom<$t> for $crate::core::mutez::MutezPlus {
+                        type Error = <BigUint as TryFrom<$t>>::Error;
+
+                        fn try_from(value: $t) -> Result<Self, Self::Error> {
+                            Ok(Self::from_biguint(BigUint::try_from(value)?))
+                        }
+                    }
+                )+
+            };
+        }
+
+        impl_from_integral!(@from u8, u16, u32, u64, u128);
+        impl_from_integral!(@tryfrom i8, i16, i32, i64, i128);
+    }
+
+    impl std::ops::Add for MutezPlus {
+        type Output = MutezPlus;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            MutezPlus(self.0 + rhs.0)
+        }
+    }
+
+    impl serde::Serialize for MutezPlus {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+            if serializer.is_human_readable() {
+                let tmp: String = self.0.to_string();
+                serializer.serialize_str(&tmp)
+            } else {
+                if let Some(amount) = self.0.to_u128() {
+                    let mut tup = serializer.serialize_tuple(2)?;
+                    tup.serialize_element(&true)?;
+                    tup.serialize_element(&amount)?;
+                    tup.end()
+                } else {
+                    let mut tup = serializer.serialize_tuple(2)?;
+                    tup.serialize_element(&false)?;
+                    tup.serialize_element(&self.0.to_u64_digits())?;
+                    tup.end()
+                }
+            }
+        }
+    }
+
+    impl MutezPlus {
+        pub const PRECISION: u64 = 1_000_000;
+
+        pub const fn from_biguint(mutez: BigUint) -> Self {
+            Self(mutez)
+        }
+
+        pub const fn as_biguint(&self) -> &BigUint {
+            &self.0
+        }
+
+        pub fn into_biguint(self) -> BigUint {
+            self.0
+        }
+
+        pub fn to_parts(&self) -> (BigUint, u64) {
+            let (radix, big_mantissa) = self.0.div_rem(&BigUint::from(Self::PRECISION));
+            let mantissa: u64 = big_mantissa
+                .to_u64()
+                .unwrap_or_else(||
+                    unreachable!(
+                        "Impossible: Remainder of division by 1e6 failed to be converted to u64(!?) [value: {big_mantissa}]"
+                    )
+                );
+            (radix, mantissa)
+        }
+
+        /// Returns a string representation of the decimal value of this [`MutezPlus`] instance,
+        /// with an implicit unit of `tez`.
+        ///
+        /// The numeric formatting is done using the standard Display for integers, and so it will
+        /// not include any separators between digits. For more readable or otherwise more customizable
+        /// formatting, see [`format_parts`].
+        pub fn to_xtz_string(&self) -> String {
+            let (radix, mantissa) = self.to_parts();
+            format!("{radix}.{mantissa}")
+        }
+
+        /// Calls an arbitrary function that maps the radix and mantissa of a [`MutezPlus`] instance
+        /// into a formatted string.
+        ///
+        /// This function is provided as a convenience for end-users who want more control over
+        /// the display format of [`MutezPlus`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
+        /// traits implementations, or the [`to_xtz_string`] associated method.
+        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(BigUint, u64) -> String {
+            let (radix, mantissa) = self.to_parts();
+            f(radix, mantissa)
+        }
+
+        pub fn to_tez_lossy(&self) -> f64 {
+            let (radix, mantissa) = self.to_parts();
+            if let Some(f_radix) = radix.to_f64() {
+                f_radix + (mantissa as f64) / (Self::PRECISION as f64)
+            } else {
+                unreachable!("f64 should encompass BigUint radixes")
+            }
+        }
+    }
+
+    impl TryFrom<Mutez> for MutezPlus {
+        type Error = <BigUint as TryFrom<i64>>::Error;
+
+        fn try_from(value: Mutez) -> Result<Self, Self::Error> {
+            let amount = value.0.try_into()?;
+            Ok(Self::from_biguint(amount))
+        }
+    }
+
+    impl TryFrom<MutezPlus> for Mutez {
+        type Error = <i64 as TryFrom<BigUint>>::Error;
+
+        fn try_from(value: MutezPlus) -> Result<Self, Self::Error> {
+            let amount = value.0.try_into()?;
+            Ok(Self::from_i64(amount))
+        }
+    }
+
+    impl std::fmt::Display for MutezPlus {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} μtz", self.0)
+        }
+    }
+
+    #[macro_export]
+    macro_rules! mtz {
+        ($amount:expr) => {
+            $crate::core::mutez::Mutez::from_i64($amount)
+        };
+        (@ n $amount:expr) => {
+            $crate::core::mutez::MutezPlus::from($amount)
+        };
+    }
+
+    #[cfg(test)]
+    mod mtz_macro_test {
+        use super::*;
+        use crate::mtz;
+
+        #[test]
+        fn mtz_macro_numlit() {
+            let hundred = mtz!(100);
+            assert_eq!(hundred, Mutez::from(100));
+        }
+
+        #[test]
+        fn mtz_macro_underscore() {
+            let million = mtz!(1_000_000);
+            assert_eq!(million, Mutez::from(1_000_000));
+        }
+
+        #[test]
+        fn mtz_macro_arithmetic() {
+            let fortytwo = mtz!(40 + 2);
+            assert_eq!(fortytwo, Mutez::from_i64(42));
+        }
+
+        #[test]
+        fn mtz_macro_lvalue() {
+            let x: i64 = 1234;
+            let x_mtz = mtz!(x);
+            assert_eq!(x_mtz, Mutez::from_i64(x));
+        }
     }
 }
 
-impl tedium::conv::len::FixedLength for Mutez {
-    const LEN: usize = <i64 as tedium::conv::len::FixedLength>::LEN;
-}
-
-#[macro_export]
-macro_rules! mtz {
-    ( $amount:expr ) => {
-        $crate::core::Mutez::from_i64($amount)
-    };
-}
-
-impl Mutez {
-    pub const PRECISION: u64 = 1_000_000;
-
-    pub const fn to_i64(&self) -> i64 {
-        self.0
-    }
-
-    pub const fn from_i64(mutez: i64) -> Self {
-        Self(mutez)
-    }
-
-    /// Partitions a [`Mutez`] around the logical decimal point in its xtz value,
-    /// returning the signed number of tez followed by the unsigned mantissa.
-    pub const fn to_parts(&self) -> (i64, u64) {
-        let abs = self.0.unsigned_abs();
-        let mantissa = abs.rem_euclid(Self::PRECISION);
-        let radix = self.0.wrapping_div(Self::PRECISION as i64);
-        (radix, mantissa)
-    }
-
-    /// Returns a string representation of the decimal value of this [`Mutez`] instance,
-    /// with an implicit unit of `tez`.
-    ///
-    /// The numeric formatting is done using the standard Display for integers, and so it will
-    /// not include any separators between digits. For more readable or otherwise more customizable
-    /// formatting, see [`format_parts`].
-    pub fn to_xtz_string(&self) -> String {
-        let (radix, mantissa) = self.to_parts();
-        format!("{radix}.{mantissa}")
-    }
-
-    /// Calls an arbitrary function that maps the radix and mantissa of a [`Mutez`] instance
-    /// into a formatted string.
-    ///
-    /// This function is provided as a convenience for end-users who want more control over
-    /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
-    /// traits implementations, or the [`to_xtz_string`] associated method.
-    pub fn format_parts<F>(&self, f: F) -> String
-    where
-        F: FnOnce(i64, u64) -> String,
-    {
-        let (radix, mantissa) = self.to_parts();
-        f(radix, mantissa)
-    }
-
-    pub fn to_tez_lossy(&self) -> f64 {
-        let val = self.0 as f64;
-        val / (Self::PRECISION as f64)
-    }
-}
-
-
-impl From<i64> for Mutez {
-    fn from(value: i64) -> Self {
-        Self(value)
-    }
-}
-
-impl std::ops::Add for Mutez {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl std::ops::AddAssign for Mutez {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
-    }
-}
-
-impl std::ops::Add<i64> for Mutez {
-    type Output = Self;
-
-    fn add(self, rhs: i64) -> Self::Output {
-        Self(self.0 + rhs)
-    }
-}
-
-impl Display for Mutez {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} μtz", self.0)
-    }
-}
-
-#[cfg(test)]
-mod mtz_macro_test {
-    use super::*;
-    use crate::mtz;
-
-    #[test]
-    fn mtz_macro_numlit() {
-        let hundred = mtz!(100);
-        assert_eq!(hundred, Mutez::from(100));
-    }
-
-    #[test]
-    fn mtz_macro_underscore() {
-        let million = mtz!(1_000_000);
-        assert_eq!(million, Mutez::from(1_000_000));
-    }
-
-    #[test]
-    fn mtz_macro_arithmetic() {
-        let fortytwo = mtz!(40 + 2);
-        assert_eq!(fortytwo, Mutez::from_i64(42));
-    }
-
-    #[test]
-    fn mtz_macro_lvalue() {
-        let x : i64 = 1234;
-        let x_mtz = mtz!(x);
-        assert_eq!(x_mtz, Mutez::from_i64(x));
-    }
-}
+pub use mutez::{ Mutez, MutezPlus };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Hash)]
 /// Representation of a rational number as a numerator-denominator pair, both of which
@@ -997,10 +1259,7 @@ pub struct InvalidDiscriminantError<T> {
 }
 
 impl<T> InvalidDiscriminantError<T> {
-    pub(self) fn from_raw(raw: u8) -> Self
-    where
-        T: std::any::Any,
-    {
+    pub(self) fn from_raw(raw: u8) -> Self where T: std::any::Any {
         Self {
             raw,
             _proxy: std::marker::PhantomData::<T>,
@@ -1010,9 +1269,7 @@ impl<T> InvalidDiscriminantError<T> {
 
 impl<T: std::any::Any> std::fmt::Debug for InvalidDiscriminantError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InvalidDiscriminantError")
-            .field("raw", &self.raw)
-            .finish()
+        f.debug_struct("InvalidDiscriminantError").field("raw", &self.raw).finish()
     }
 }
 
@@ -1041,16 +1298,13 @@ impl VotingPeriodKind {
     ///
     /// Will panic if `raw` is invalid as a discriminant of this type (i.e. `raw > 4`).
     pub fn from_u8(raw: u8) -> Self {
-        assert!(
-            raw < 5,
-            "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]"
-        );
+        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
         unsafe { Self::from_u8_unchecked(raw) }
     }
 
     pub fn try_from_u8(raw: u8) -> Result<Self, InvalidDiscriminantError<Self>> {
         match raw {
-            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) },
+            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) }
             _ => Err(InvalidDiscriminantError::<Self>::from_raw(raw)),
         }
     }

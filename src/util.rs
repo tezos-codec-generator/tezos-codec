@@ -55,3 +55,9 @@ impl VoteStatistics {
         self.pass_count
     }
 }
+
+pub(crate) fn abstract_unpack_dynseq<T: Into<U>, U, L: tedium::dynamic::LenPref>(
+    raw: tedium::Dynamic<L, tedium::Sequence<T>>,
+) -> Vec<U> {
+    raw.into_inner().into_iter().map(|elt| elt.into()).collect()
+}
