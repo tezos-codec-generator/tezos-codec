@@ -520,7 +520,7 @@ impl BlindedPublicKeyHash {
     /// # use tezos_codec::traits::Crypto;
     /// let bpkh = BlindedPublicKeyHash::from_byte_array([0u8; 20]);
     /// let image : String = bpkh.to_base58check();
-    /// assert_eq!(&bpkh[0..4], "btz1")
+    /// assert_eq!(&image[0..4], "btz1")
     /// ```
     pub const BASE58_PREFIX: [u8; 4] = [1, 2, 49, 223];
 }
