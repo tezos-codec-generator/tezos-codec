@@ -178,11 +178,12 @@ pub mod api {
             ProtocolHash,
             PublicKeyHashV0,
             RatioU16,
-            VotingPeriodKind, ContractId,
+            VotingPeriodKind,
+            ContractId,
             // Mutez,
             transaction::Entrypoint,
         },
-        traits::{ ContainsBallots, ContainsProposals, Crypto },
+        traits::{ ContainsBallots, ContainsProposals, Crypto, ContainsTransactions },
         util::abstract_unpack_dynseq,
     };
 
@@ -274,6 +275,29 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for LimaBlockInfo {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_transactions()))
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operations
+                .iter()
+                .fold(0usize, |major, ops| {
+                    ops.iter().fold(major, |minor, op| minor + op.count_transactions())
+                })
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_transactions()))
+                .collect()
+        }
+    }
+
     impl LimaBlockInfo {
         /// Returns a [Vec] containing every [LimaBallot] operation included in this [LimaBlockInfo].
         pub fn get_all_ballots(&self) -> Vec<LimaBallot> {
@@ -288,6 +312,13 @@ pub mod api {
             self.operations
                 .iter()
                 .flat_map(|v| v.iter().flat_map(|op| op.get_proposals()))
+                .collect()
+        }
+
+        pub fn get_all_transactions(&self) -> Vec<LimaTransaction> {
+            self.operations
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|op| op.get_transactions()))
                 .collect()
         }
     }
@@ -633,6 +664,38 @@ pub mod api {
         }
     }
 
+    impl ContainsBallots for LimaOperation {
+        type BallotType = LimaBallot;
+
+        fn has_ballots(&self) -> bool {
+            self.operation.has_ballots()
+        }
+
+        fn count_ballots(&self) -> usize {
+            self.operation.count_ballots()
+        }
+
+        fn get_ballots(&self) -> Vec<Self::BallotType> {
+            self.operation.get_ballots()
+        }
+    }
+
+    impl ContainsTransactions for LimaOperation {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operation.has_transactions()
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operation.count_transactions()
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operation.get_transactions()
+        }
+    }
+
     impl ContainsProposals for LimaOperation {
         type ProposalsType = LimaProposals;
 
@@ -707,6 +770,22 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for LimaOperationPayload {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operation.has_transactions()
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operation.count_transactions()
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operation.get_transactions()
+        }
+    }
+
     impl ContainsProposals for LimaOperationPayload {
         type ProposalsType = LimaProposals;
 
@@ -777,6 +856,41 @@ pub mod api {
                     contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
                 LimaOperationContainer::WithoutMetadata { contents, .. } =>
                     contents.iter().flat_map(ContainsBallots::get_ballots).collect(),
+            }
+        }
+    }
+
+    impl ContainsTransactions for LimaOperationContainer {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().any(ContainsTransactions::has_transactions)
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(ContainsTransactions::has_transactions)
+                }
+            }
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().map(ContainsTransactions::count_transactions).sum()
+                }
+                LimaOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().map(ContainsTransactions::count_transactions).sum()
+                }
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                LimaOperationContainer::WithMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsTransactions::get_transactions).collect(),
+                LimaOperationContainer::WithoutMetadata { contents, .. } =>
+                    contents.iter().flat_map(ContainsTransactions::get_transactions).collect(),
             }
         }
     }
@@ -969,7 +1083,6 @@ pub mod api {
         }
     }
 
-
     // #[repr(u8)]
     // #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
     // pub(crate) enum UpdateOrigin  {
@@ -978,9 +1091,6 @@ pub mod api {
     //     Subsidy = 2,
     //     Simulation = 3,
     // }
-
-
-
 
     // // TODO[epic=facade]
     // #[derive(Clone, Debug, PartialEq, Hash, Serialize)]
@@ -1044,7 +1154,8 @@ pub mod api {
         }
     }
 
-    pub type RawLimaTransaction = raw::block_info::proto015ptlimaptoperationalphacontents::Transaction;
+    pub type RawLimaTransaction =
+        raw::block_info::proto015ptlimaptoperationalphacontents::Transaction;
 
     impl tedium::Decode for LimaTransaction {
         fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
@@ -1221,6 +1332,28 @@ pub mod api {
                     transaction,
                 ) => Ok(Self::Transaction(LimaTransaction::from(transaction))),
                 other => Ok(Self::Raw(other)),
+            }
+        }
+    }
+
+    impl ContainsTransactions for LimaOperationContentsAndResult {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            matches!(self, &Self::Transaction(..))
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                LimaOperationContentsAndResult::Transaction(_) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                Self::Transaction(t) => vec![t.clone()],
+                _ => Vec::new(),
             }
         }
     }
@@ -1514,6 +1647,28 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for LimaOperationContents {
+        type TransactionType = LimaTransaction;
+
+        fn has_transactions(&self) -> bool {
+            matches!(self, &Self::Transaction(..))
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                Self::Transaction(_) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                Self::Transaction(t) => vec![t.clone()],
+                _ => Vec::new(),
+            }
+        }
+    }
+
     impl ContainsProposals for LimaOperationContents {
         type ProposalsType = LimaProposals;
 
@@ -1536,54 +1691,6 @@ pub mod api {
         }
     }
 
-    impl ContainsBallots for LimaOperation {
-        type BallotType = LimaBallot;
-
-        fn get_ballots(&self) -> Vec<Self::BallotType> {
-            match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect()
-                }
-                LimaOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect()
-                }
-            }
-        }
-
-        fn has_ballots(&self) -> bool {
-            match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } => {
-                    contents.iter().any(|op| op.has_ballots())
-                }
-                LimaOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents.iter().any(|op| op.has_ballots())
-                }
-            }
-        }
-
-        fn count_ballots(&self) -> usize {
-            match &self.operation.operation {
-                LimaOperationContainer::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum()
-                }
-                LimaOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum()
-                }
-            }
-        }
-    }
 
     // pub type LimaConstants = super::raw::constants::Proto015PtLimaPtConstants;
 

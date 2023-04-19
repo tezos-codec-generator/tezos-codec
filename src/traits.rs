@@ -47,6 +47,21 @@ pub trait ContainsBallots {
     fn get_ballots(&self) -> Vec<Self::BallotType>;
 }
 
+pub trait ContainsTransactions {
+    /// Specific type used to represent the transaction operations that are
+    /// possibly contained within values of [`Self`].
+    type TransactionType;
+
+    /// Returns `true` if there is at least one transaction operation contained within this object.
+    fn has_transactions(&self) -> bool;
+
+    /// Returns the cumulative number of transactions contained within this object.
+    fn count_transactions(&self) -> usize;
+
+    /// Returns a [`Vec`] containing all the transactions recursively contained within this object.
+    fn get_transactions(&self) -> Vec<Self::TransactionType>;
+}
+
 /// Extension trait on [`ContainsBallots`]
 pub trait ContainsBallotsExt: ContainsBallots {
     /// Computes and returns a summary table of the voting statistics for

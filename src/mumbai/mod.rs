@@ -173,9 +173,10 @@ pub mod api {
             SignatureV1,
             VotingPeriodKind,
             mutez::MutezPlus,
-            transaction::Entrypoint, ContractHash,
+            transaction::Entrypoint,
+            ContractHash,
         },
-        traits::{ ContainsBallots, ContainsProposals, Crypto },
+        traits::{ ContainsBallots, ContainsProposals, Crypto, ContainsTransactions },
         util::abstract_unpack_dynseq,
     };
 
@@ -248,6 +249,33 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for MumbaiBlockInfo {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_transactions()))
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operations
+                .iter()
+                .map(|ops|
+                    ops
+                        .iter()
+                        .map(|op| op.count_transactions())
+                        .sum::<usize>()
+                )
+                .sum()
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operations
+                .iter()
+                .flat_map(|ops| ops.iter().flat_map(|op| op.get_transactions()))
+                .collect()
+        }
+    }
+
     impl ContainsBallots for MumbaiBlockInfo {
         type BallotType = MumbaiBallot;
 
@@ -282,6 +310,10 @@ pub mod api {
 
         pub fn get_all_proposals(&self) -> Vec<MumbaiProposals> {
             self.get_proposals()
+        }
+
+        pub fn get_all_transactions(&self) -> Vec<MumbaiTransaction> {
+            self.get_transactions()
         }
     }
 
@@ -368,6 +400,22 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for MumbaiOperation {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operation.has_transactions()
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operation.count_transactions()
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operation.get_transactions()
+        }
+    }
+
     impl ContainsBallots for MumbaiOperation {
         type BallotType = MumbaiBallot;
 
@@ -403,6 +451,22 @@ pub mod api {
 
         fn get_proposals(&self) -> Vec<Self::ProposalsType> {
             self.operation.get_proposals()
+        }
+    }
+
+    impl ContainsTransactions for MumbaiOperationPayload {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            self.operation.has_transactions()
+        }
+
+        fn count_transactions(&self) -> usize {
+            self.operation.count_transactions()
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            self.operation.get_transactions()
         }
     }
 
@@ -455,6 +519,55 @@ pub mod api {
             contents: Vec<MumbaiOperationContentsAndResult>,
             signature: Option<SignatureV1>,
         },
+    }
+
+    impl ContainsTransactions for MumbaiOperationContainer {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            match self {
+                MumbaiOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents.iter().any(|op| op.has_transactions())
+                }
+                MumbaiOperationContainer::WithMetadata { contents, .. } => {
+                    contents.iter().any(|op| op.has_transactions())
+                }
+            }
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                MumbaiOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents
+                        .iter()
+                        .map(|op| op.count_transactions())
+                        .sum()
+                }
+                MumbaiOperationContainer::WithMetadata { contents, .. } => {
+                    contents
+                        .iter()
+                        .map(|op| op.count_transactions())
+                        .sum()
+                }
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                MumbaiOperationContainer::WithoutMetadata { contents, .. } => {
+                    contents
+                        .iter()
+                        .flat_map(|op| op.get_transactions())
+                        .collect()
+                }
+                MumbaiOperationContainer::WithMetadata { contents, .. } => {
+                    contents
+                        .iter()
+                        .flat_map(|op| op.get_transactions())
+                        .collect()
+                }
+            }
+        }
     }
 
     impl ContainsProposals for MumbaiOperationContainer {
@@ -700,6 +813,28 @@ pub mod api {
         }
     }
 
+    impl ContainsTransactions for MumbaiOperationContents {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            matches!(self, &Self::Transaction(..))
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                Self::Transaction(..) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                Self::Transaction(ret) => vec![ret.clone()],
+                _ => Vec::new(),
+            }
+        }
+    }
+
     impl ContainsProposals for MumbaiOperationContents {
         type ProposalsType = MumbaiProposals;
 
@@ -757,7 +892,7 @@ pub mod api {
                 }
                 block_info::Proto016PtMumbaiOperationAlphaContents::Proposals(proposals) => {
                     Ok(Self::Proposals(proposals.into()))
-                },
+                }
                 block_info::Proto016PtMumbaiOperationAlphaContents::Transaction(transaction) => {
                     Ok(Self::Transaction(transaction.into()))
                 }
@@ -838,6 +973,7 @@ pub mod api {
         amount: MutezPlus,
         destination: MumbaiContractId,
         parameters: std::option::Option<MumbaiTransactionParameters>,
+        // metadata: Option<MumbaiTransactionMetadata>,
     }
 
     impl serde::Serialize for MumbaiTransaction {
@@ -863,6 +999,7 @@ pub mod api {
             s.serialize_field("amount", &self.amount)?;
             s.serialize_field("destination", &self.destination)?;
             s.serialize_field("parameters", &self.parameters)?;
+            // s.serialize_field("metadata", &self.metadata)?;
             s.end()
         }
     }
@@ -891,6 +1028,28 @@ pub mod api {
         Proposals(MumbaiProposals),
         Transaction(MumbaiTransaction),
         Raw(raw::block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult),
+    }
+
+    impl ContainsTransactions for MumbaiOperationContentsAndResult {
+        type TransactionType = MumbaiTransaction;
+
+        fn has_transactions(&self) -> bool {
+            matches!(self, &Self::Transaction(..))
+        }
+
+        fn count_transactions(&self) -> usize {
+            match self {
+                Self::Transaction(..) => 1,
+                _ => 0,
+            }
+        }
+
+        fn get_transactions(&self) -> Vec<Self::TransactionType> {
+            match self {
+                Self::Transaction(ret) => vec![ret.clone()],
+                _ => Vec::new(),
+            }
+        }
     }
 
     impl ContainsProposals for MumbaiOperationContentsAndResult {
@@ -943,6 +1102,22 @@ pub mod api {
         #[must_use]
         pub fn is_ballot(&self) -> bool {
             matches!(self, Self::Ballot(..))
+        }
+
+        /// Returns `true` if the mumbai operation contents and result is [`Transaction`].
+        ///
+        /// [`Transaction`]: MumbaiOperationContentsAndResult::Transaction
+        #[must_use]
+        pub fn is_transaction(&self) -> bool {
+            matches!(self, Self::Transaction(..))
+        }
+
+        /// Returns `true` if the mumbai operation contents and result is [`Proposals`].
+        ///
+        /// [`Proposals`]: MumbaiOperationContentsAndResult::Proposals
+        #[must_use]
+        pub fn is_proposals(&self) -> bool {
+            matches!(self, Self::Proposals(..))
         }
     }
 
