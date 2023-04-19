@@ -153,7 +153,7 @@ pub mod api {
             Proto016PtMumbaiEntrypoint,
             Proto016PtMumbaiOperationAlphaContentsTransactionParameters,
             Proto016PtMumbaiContractId,
-            proto016ptmumbaicontractid::Implicit,
+            proto016ptmumbaicontractid::Implicit, Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
         },
     };
 
@@ -952,6 +952,15 @@ pub mod api {
         value: tedium::Bytes,
     }
 
+    impl From<Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters> for MumbaiTransactionParameters {
+        fn from(value: Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters) -> Self {
+            Self {
+                entrypoint: value.entrypoint.into(),
+                value: value.value.into_inner(),
+            }
+        }
+    }
+
     impl From<Proto016PtMumbaiOperationAlphaContentsTransactionParameters>
     for MumbaiTransactionParameters {
         fn from(value: Proto016PtMumbaiOperationAlphaContentsTransactionParameters) -> Self {
@@ -1023,6 +1032,25 @@ pub mod api {
                 amount: MutezPlus::from_biguint(value.amount.into_inner()),
                 destination: MumbaiContractId::from(value.destination),
                 parameters: value.parameters.map(|params| params.into()),
+            }
+        }
+    }
+
+  impl From<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction>
+    for MumbaiTransaction {
+        fn from(
+            value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction
+        ) -> Self {
+            Self {
+                source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
+                fee: MutezPlus::from_biguint(value.fee.into_inner()),
+                counter: value.counter.into_inner(),
+                gas_limit: value.gas_limit.into_inner(),
+                storage_limit: value.storage_limit.into_inner(),
+                amount: MutezPlus::from_biguint(value.amount.into_inner()),
+                destination: MumbaiContractId::from(value.destination),
+                parameters: value.parameters.map(|params| params.into()),
+                // TODO - metadata
             }
         }
     }
@@ -1100,6 +1128,7 @@ pub mod api {
             }
         }
     }
+
     impl MumbaiOperationContentsAndResult {
         /// Returns `true` if the mumbai operation contents and result is [`Ballot`].
         ///
@@ -1140,6 +1169,9 @@ pub mod api {
                 block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult::Proposals(
                     proposals,
                 ) => Ok(Self::Proposals(proposals.into())),
+                block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult::Transaction(
+                    transaction
+                ) => Ok(Self::Transaction(transaction.into())),
                 other => Ok(Self::Raw(other)),
             }
         }
