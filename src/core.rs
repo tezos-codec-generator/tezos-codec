@@ -905,7 +905,6 @@ pub mod mutez {
 
     use num::{ Integer, ToPrimitive };
     use num_bigint::BigUint;
-    use serde::ser::SerializeTuple;
     use tedium::Decode;
 
     #[repr(transparent)]
@@ -1054,22 +1053,7 @@ pub mod mutez {
 
     impl serde::Serialize for MutezPlus {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            if serializer.is_human_readable() {
-                let tmp: String = self.0.to_string();
-                serializer.serialize_str(&tmp)
-            } else {
-                if let Some(amount) = self.0.to_u128() {
-                    let mut tup = serializer.serialize_tuple(2)?;
-                    tup.serialize_element(&true)?;
-                    tup.serialize_element(&amount)?;
-                    tup.end()
-                } else {
-                    let mut tup = serializer.serialize_tuple(2)?;
-                    tup.serialize_element(&false)?;
-                    tup.serialize_element(&self.0.to_u64_digits())?;
-                    tup.end()
-                }
-            }
+            self.0.serialize(serializer)
         }
     }
 

@@ -152,7 +152,6 @@ pub mod api {
     };
     use num::ToPrimitive;
     use num_bigint::{ BigInt, BigUint };
-    use serde::ser::SerializeStruct;
     use tedium::{ u30, Dynamic, Sequence };
     use tezos_codegen::proto015_ptlimapt::{
         block_info::{
@@ -1027,7 +1026,7 @@ pub mod api {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Hash)]
+    #[derive(Clone, Debug, PartialEq, Hash, Serialize)]
     pub struct LimaTransaction {
         source: PublicKeyHashV0,
         fee: MutezPlus,
@@ -1037,36 +1036,11 @@ pub mod api {
         amount: MutezPlus,
         destination: LimaContractId,
         parameters: Option<LimaTransactionParameters>,
+        #[serde(skip_serializing)] // FIXME[epic=serde]
         metadata: Option<LimaTransactionMetadata>,
     }
 
-    impl serde::Serialize for LimaTransaction {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            let mut s = serializer.serialize_struct("LimaTransaction", 8)?;
-            s.serialize_field("source", &self.source)?;
-            s.serialize_field("fee", &self.fee)?;
-            if let Some(ref ctr) = self.counter.to_u128() {
-                s.serialize_field("counter", ctr)?;
-            } else {
-                s.serialize_field("counter", &self.counter.to_u64_digits())?;
-            }
-            if let Some(ref l_gas) = self.gas_limit.to_u128() {
-                s.serialize_field("gas_limit", l_gas)?;
-            } else {
-                s.serialize_field("gas_limit", &self.gas_limit.to_u64_digits())?;
-            }
-            if let Some(ref l_storage) = self.storage_limit.to_u128() {
-                s.serialize_field("storage_limit", l_storage)?;
-            } else {
-                s.serialize_field("storage_limit", &self.storage_limit.to_u64_digits())?;
-            }
-            s.serialize_field("amount", &self.amount)?;
-            s.serialize_field("destination", &self.destination)?;
-            s.serialize_field("parameters", &self.parameters)?;
-            // s.serialize_field("metadata", &self.metadata)?;
-            s.end()
-        }
-    }
+
 
     impl From<raw::block_info::Proto015PtLimaPtOperationAlphaOperationContentsAndResultTransactionMetadata>
     for LimaTransactionMetadata {

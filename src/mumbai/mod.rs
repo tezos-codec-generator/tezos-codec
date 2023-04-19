@@ -146,7 +146,6 @@ pub mod raw {
 pub mod api {
     use super::raw::{ self, block_info };
     use num::{ BigInt, BigUint, ToPrimitive };
-    use serde::ser::SerializeStruct;
     use tedium::{ u30, Dynamic, Sequence };
     use tezos_codegen::{
         proto016_ptmumbai::block_info::{
@@ -963,7 +962,7 @@ pub mod api {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Hash)]
+    #[derive(Clone, Debug, PartialEq, Hash, Serialize)]
     pub struct MumbaiTransaction {
         source: PublicKeyHashV1,
         fee: MutezPlus,
@@ -976,33 +975,6 @@ pub mod api {
         // metadata: Option<MumbaiTransactionMetadata>,
     }
 
-    impl serde::Serialize for MumbaiTransaction {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            let mut s = serializer.serialize_struct("MumbaiTransaction", 8)?;
-            s.serialize_field("source", &self.source)?;
-            s.serialize_field("fee", &self.fee)?;
-            if let Some(ref ctr) = self.counter.to_u128() {
-                s.serialize_field("counter", ctr)?;
-            } else {
-                s.serialize_field("counter", &self.counter.to_u64_digits())?;
-            }
-            if let Some(ref l_gas) = self.gas_limit.to_u128() {
-                s.serialize_field("gas_limit", l_gas)?;
-            } else {
-                s.serialize_field("gas_limit", &self.gas_limit.to_u64_digits())?;
-            }
-            if let Some(ref l_storage) = self.storage_limit.to_u128() {
-                s.serialize_field("storage_limit", l_storage)?;
-            } else {
-                s.serialize_field("storage_limit", &self.storage_limit.to_u64_digits())?;
-            }
-            s.serialize_field("amount", &self.amount)?;
-            s.serialize_field("destination", &self.destination)?;
-            s.serialize_field("parameters", &self.parameters)?;
-            // s.serialize_field("metadata", &self.metadata)?;
-            s.end()
-        }
-    }
 
     impl From<raw::block_info::proto016ptmumbaioperationalphacontents::Transaction>
     for MumbaiTransaction {
