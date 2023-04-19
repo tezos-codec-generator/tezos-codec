@@ -173,7 +173,7 @@ pub mod api {
             VotingPeriodKind,
             mutez::MutezPlus,
             transaction::Entrypoint,
-            ContractHash,
+            ContractHash, ContractId,
         },
         traits::{ ContainsBallots, ContainsProposals, Crypto, ContainsTransactions },
         util::abstract_unpack_dynseq,
@@ -975,6 +975,39 @@ pub mod api {
         // metadata: Option<MumbaiTransactionMetadata>,
     }
 
+    impl MumbaiTransaction {
+        pub fn source(&self) -> PublicKeyHashV1 {
+            self.source
+        }
+
+        pub fn fee(&self) -> &MutezPlus {
+            &self.fee
+        }
+
+        pub fn counter(&self) -> &BigUint {
+            &self.counter
+        }
+
+        pub fn gas_limit(&self) -> &BigUint {
+            &self.gas_limit
+        }
+
+        pub fn storage_limit(&self) -> &BigUint {
+            &self.storage_limit
+        }
+
+        pub fn amount(&self) -> &MutezPlus {
+            &self.amount
+        }
+
+        pub fn destination(&self) -> ContractId<PublicKeyHashV1> {
+            self.destination
+        }
+
+        pub fn parameters(&self) -> Option<&MumbaiTransactionParameters> {
+            self.parameters.as_ref()
+        }
+    }
 
     impl From<raw::block_info::proto016ptmumbaioperationalphacontents::Transaction>
     for MumbaiTransaction {
