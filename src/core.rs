@@ -1053,7 +1053,8 @@ pub mod mutez {
 
     impl serde::Serialize for MutezPlus {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            self.0.serialize(serializer)
+            let tmp = format!("{self}");
+            serializer.serialize_str(&tmp)
         }
     }
 
