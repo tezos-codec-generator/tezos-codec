@@ -150,7 +150,6 @@ pub mod api {
             },
         },
     };
-    use num::ToPrimitive;
     use num_bigint::{ BigInt, BigUint };
     use tedium::{ u30, Dynamic, Sequence };
     use tezos_codegen::proto015_ptlimapt::{

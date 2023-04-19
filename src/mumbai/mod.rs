@@ -145,7 +145,7 @@ pub mod raw {
 
 pub mod api {
     use super::raw::{ self, block_info };
-    use num::{ BigInt, BigUint, ToPrimitive };
+    use num::{ BigInt, BigUint };
     use tedium::{ u30, Dynamic, Sequence };
     use tezos_codegen::{
         proto016_ptmumbai::block_info::{
