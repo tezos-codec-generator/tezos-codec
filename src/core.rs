@@ -4,6 +4,7 @@ pub mod base58;
 pub mod rpc;
 
 use std::{ fmt::Display, hint::unreachable_unchecked };
+use chrono::{ DateTime, Utc, NaiveDateTime };
 
 use num::rational::Ratio;
 use tedium::FixedBytes;
@@ -364,6 +365,15 @@ pub enum SignatureV1 {
 
 #[derive(Debug)]
 pub struct InvalidSignatureV1ByteLengthError(pub(crate) usize);
+
+impl From<InvalidSignatureV1ByteLengthError> for tedium::parse::error::ExternalError {
+    fn from(value: InvalidSignatureV1ByteLengthError) -> Self {
+        Self::WidthViolation(tedium::error::WidthError::InvalidWidth {
+            valid: &[64, 96usize],
+            actual: value.0,
+        })
+    }
+}
 
 impl Display for InvalidSignatureV1ByteLengthError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -856,14 +866,67 @@ impl DynamicPrefix for PublicKeyHashV1 {
 
 impl Crypto for PublicKeyHashV1 {}
 
+#[derive(Debug)]
+pub struct AnachronisticTimestampError(i64);
+
+impl std::fmt::Display for AnachronisticTimestampError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "epoch offset `{}` outside of conceivable time-range", self.0)
+    }
+}
+
+impl std::error::Error for AnachronisticTimestampError {}
+
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Timestamp(i64);
 
+impl TryFrom<Timestamp> for DateTime<Utc> {
+    type Error = AnachronisticTimestampError;
+
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        let secs = value.0;
+        if let Some(datetime) = NaiveDateTime::from_timestamp_opt(secs, 0) {
+            Ok(
+                DateTime::<Utc>::from_utc(datetime, Utc)
+            )
+        } else {
+            Err(
+                AnachronisticTimestampError(secs)
+            )
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+            Ok(Self(i64::deserialize(deserializer)?))
+    }
+}
+
+impl serde::Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+            if let Ok(utc) = <Timestamp as TryInto<DateTime<Utc>>>::try_into(*self) {
+                utc.serialize(serializer)
+            } else {
+                self.0.serialize(serializer)
+            }
+    }
+}
+
+
+
 impl std::fmt::Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: implement RFC3339 (chrono) display
-        self.0.fmt(f)
+        if let Ok(utc_date) = DateTime::<Utc>::try_from(*self) {
+            write!(f, "{}", utc_date.to_rfc3339())
+        } else {
+            write!(f, "{:?}", self)
+        }
     }
 }
 
@@ -873,6 +936,22 @@ impl Timestamp {
     /// Upcasts an [`i64`] to a representationally equivalent [`Timestamp`].
     pub const fn from_i64(i: i64) -> Self {
         Self(i)
+    }
+
+    /// Converts this [`Timestamp`] to the corresponding [`DateTime<Utc>`] value
+    ///
+    /// # Panics
+    ///
+    /// Panics if the timestamp is fundamentally too large to convert to a [`DateTime<Utc>`].
+    #[must_use]
+    pub fn to_utc(&self) -> DateTime<Utc> {
+        let ret = (*self).try_into().unwrap_or_else(|err| panic!("{err}"));
+        ret
+    }
+
+    #[inline]
+    pub fn try_to_utc(&self) -> Result<DateTime<Utc>, AnachronisticTimestampError> {
+        (*self).try_into()
     }
 }
 
@@ -899,6 +978,18 @@ impl std::borrow::Borrow<i64> for Timestamp {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::*;
+
+    #[test]
+    fn epoch_test() {
+        let utc : DateTime<Utc> = DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z").unwrap().into();
+        assert_eq!(Timestamp::from_i64(0).to_utc(), utc);
+    }
+}
+
 
 pub mod mutez {
     use std::fmt::Display;

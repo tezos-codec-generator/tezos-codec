@@ -153,7 +153,8 @@ pub mod api {
             Proto016PtMumbaiEntrypoint,
             Proto016PtMumbaiOperationAlphaContentsTransactionParameters,
             Proto016PtMumbaiContractId,
-            proto016ptmumbaicontractid::Implicit, Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
+            proto016ptmumbaicontractid::Implicit,
+            Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
         },
     };
 
@@ -163,7 +164,6 @@ pub mod api {
             BlockHash,
             ChainId,
             InvalidDiscriminantError,
-            InvalidSignatureV1ByteLengthError,
             NonceHash,
             OperationHash,
             ProtocolHash,
@@ -173,7 +173,8 @@ pub mod api {
             VotingPeriodKind,
             mutez::MutezPlus,
             transaction::Entrypoint,
-            ContractHash, ContractId,
+            ContractHash,
+            ContractId,
         },
         traits::{ ContainsBallots, ContainsProposals, Crypto, ContainsTransactions },
         util::abstract_unpack_dynseq,
@@ -188,15 +189,6 @@ pub mod api {
         header: MumbaiBlockHeader,
         metadata: Option<MumbaiMetadata>,
         operations: Vec<Vec<MumbaiOperation>>,
-    }
-
-    impl From<InvalidSignatureV1ByteLengthError> for tedium::parse::error::ExternalError {
-        fn from(value: InvalidSignatureV1ByteLengthError) -> Self {
-            Self::WidthViolation(tedium::error::WidthError::InvalidWidth {
-                valid: &[64, 96usize],
-                actual: value.0,
-            })
-        }
     }
 
     impl MumbaiBlockInfo {
@@ -952,8 +944,11 @@ pub mod api {
         value: tedium::Bytes,
     }
 
-    impl From<Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters> for MumbaiTransactionParameters {
-        fn from(value: Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters) -> Self {
+    impl From<Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters>
+    for MumbaiTransactionParameters {
+        fn from(
+            value: Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters
+        ) -> Self {
             Self {
                 entrypoint: value.entrypoint.into(),
                 value: value.value.into_inner(),
@@ -1036,7 +1031,7 @@ pub mod api {
         }
     }
 
-  impl From<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction>
+    impl From<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction>
     for MumbaiTransaction {
         fn from(
             value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction
@@ -1170,7 +1165,7 @@ pub mod api {
                     proposals,
                 ) => Ok(Self::Proposals(proposals.into())),
                 block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult::Transaction(
-                    transaction
+                    transaction,
                 ) => Ok(Self::Transaction(transaction.into())),
                 other => Ok(Self::Raw(other)),
             }
