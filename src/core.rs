@@ -1,10 +1,10 @@
 pub mod ballot;
-pub mod transaction;
 pub mod base58;
 pub mod rpc;
+pub mod transaction;
 
-use std::{ fmt::Display, hint::unreachable_unchecked };
-use chrono::{ DateTime, Utc, NaiveDateTime };
+use chrono::{DateTime, NaiveDateTime, Utc};
+use std::{fmt::Display, hint::unreachable_unchecked};
 
 use num::rational::Ratio;
 use tedium::FixedBytes;
@@ -133,7 +133,10 @@ macro_rules! impl_serde_crypto {
     };
 }
 
-use crate::{ impl_crypto_display, traits::{ AsPayload, Crypto, DynamicPrefix, StaticPrefix } };
+use crate::{
+    impl_crypto_display,
+    traits::{AsPayload, Crypto, DynamicPrefix, StaticPrefix},
+};
 
 boilerplate!(OperationHash = 32);
 impl_crypto_display!(OperationHash);
@@ -249,11 +252,19 @@ impl<Pkh: Crypto> ContractId<Pkh> {
     }
 
     pub fn as_implicit(&self) -> Option<&Pkh> {
-        if let Self::Implicit(v) = self { Some(v) } else { None }
+        if let Self::Implicit(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 
     pub fn as_originated(&self) -> Option<&ContractHash> {
-        if let Self::Originated(v) = self { Some(v) } else { None }
+        if let Self::Originated(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 }
 
@@ -414,17 +425,15 @@ mod sigv1_impls {
         fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
             match value.len() {
                 96 => unsafe {
-                    let bytes: FixedBytes<96> = FixedBytes::try_from_slice(
-                        value.as_ref()
-                    ).unwrap_unchecked();
+                    let bytes: FixedBytes<96> =
+                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
                     Ok(Self::Bls(bytes))
-                }
+                },
                 64 => unsafe {
-                    let bytes: FixedBytes<64> = FixedBytes::try_from_slice(
-                        value.as_ref()
-                    ).unwrap_unchecked();
+                    let bytes: FixedBytes<64> =
+                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
                     Ok(Self::SigV0(bytes))
-                }
+                },
                 other => Err(InvalidSignatureV1ByteLengthError(other)),
             }
         }
@@ -598,7 +607,10 @@ impl std::hash::Hash for PublicKeyHashV0 {
 }
 
 impl tedium::Decode for PublicKeyHashV0 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -616,7 +628,10 @@ impl PublicKeyHashV0 {
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -625,7 +640,7 @@ impl serde::Serialize for PublicKeyHashV0 {
                 "PublicKeyHashV0",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload()
+                self.as_payload(),
             )
         }
     }
@@ -702,7 +717,10 @@ pub struct UnsupportedAlgorithmError(());
 
 impl std::fmt::Display for UnsupportedAlgorithmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "cannot downcast: cryptographic algorithm unsupported in target type")
+        write!(
+            f,
+            "cannot downcast: cryptographic algorithm unsupported in target type"
+        )
     }
 }
 
@@ -794,7 +812,10 @@ impl std::hash::Hash for PublicKeyHashV1 {
 }
 
 impl tedium::Decode for PublicKeyHashV1 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+    where
+        Self: Sized,
+    {
         let tag = p.take_tagword::<PublicKeyHashV1, u8, _>(&[0, 1, 2, 3])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -811,7 +832,10 @@ impl PublicKeyHashV1 {
 }
 
 impl serde::Serialize for PublicKeyHashV1 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -820,7 +844,7 @@ impl serde::Serialize for PublicKeyHashV1 {
                 "PublicKeyHashV1",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload()
+                self.as_payload(),
             )
         }
     }
@@ -871,7 +895,11 @@ pub struct AnachronisticTimestampError(i64);
 
 impl std::fmt::Display for AnachronisticTimestampError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "epoch offset `{}` outside of conceivable time-range", self.0)
+        write!(
+            f,
+            "epoch offset `{}` outside of conceivable time-range",
+            self.0
+        )
     }
 }
 
@@ -887,13 +915,9 @@ impl TryFrom<Timestamp> for DateTime<Utc> {
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
         let secs = value.0;
         if let Some(datetime) = NaiveDateTime::from_timestamp_opt(secs, 0) {
-            Ok(
-                DateTime::<Utc>::from_utc(datetime, Utc)
-            )
+            Ok(DateTime::<Utc>::from_utc(datetime, Utc))
         } else {
-            Err(
-                AnachronisticTimestampError(secs)
-            )
+            Err(AnachronisticTimestampError(secs))
         }
     }
 }
@@ -901,24 +925,24 @@ impl TryFrom<Timestamp> for DateTime<Utc> {
 impl<'de> serde::Deserialize<'de> for Timestamp {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            Ok(Self(i64::deserialize(deserializer)?))
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self(i64::deserialize(deserializer)?))
     }
 }
 
 impl serde::Serialize for Timestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
-            if let Ok(utc) = <Timestamp as TryInto<DateTime<Utc>>>::try_into(*self) {
-                utc.serialize(serializer)
-            } else {
-                self.0.serialize(serializer)
-            }
+        S: serde::Serializer,
+    {
+        if let Ok(utc) = <Timestamp as TryInto<DateTime<Utc>>>::try_into(*self) {
+            utc.serialize(serializer)
+        } else {
+            self.0.serialize(serializer)
+        }
     }
 }
-
-
 
 impl std::fmt::Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -985,16 +1009,17 @@ mod timestamp_tests {
 
     #[test]
     fn epoch_test() {
-        let utc : DateTime<Utc> = DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z").unwrap().into();
+        let utc: DateTime<Utc> = DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
+            .unwrap()
+            .into();
         assert_eq!(Timestamp::from_i64(0).to_utc(), utc);
     }
 }
 
-
 pub mod mutez {
     use std::fmt::Display;
 
-    use num::{ Integer, ToPrimitive };
+    use num::{Integer, ToPrimitive};
     use num_bigint::BigUint;
     use tedium::Decode;
 
@@ -1039,7 +1064,10 @@ pub mod mutez {
         /// This function is provided as a convenience for end-users who want more control over
         /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
         /// traits implementations, or the [`to_xtz_string`] associated method.
-        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(i64, u64) -> String {
+        pub fn format_parts<F>(&self, f: F) -> String
+        where
+            F: FnOnce(i64, u64) -> String,
+        {
             let (radix, mantissa) = self.to_parts();
             f(radix, mantissa)
         }
@@ -1085,7 +1113,10 @@ pub mod mutez {
     }
 
     impl Decode for Mutez {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             Ok(i64::parse(p)?.into())
         }
     }
@@ -1143,7 +1174,10 @@ pub mod mutez {
     }
 
     impl serde::Serialize for MutezPlus {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
             let tmp = format!("{self}");
             serializer.serialize_str(&tmp)
         }
@@ -1193,7 +1227,10 @@ pub mod mutez {
         /// This function is provided as a convenience for end-users who want more control over
         /// the display format of [`MutezPlus`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
         /// traits implementations, or the [`to_xtz_string`] associated method.
-        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(BigUint, u64) -> String {
+        pub fn format_parts<F>(&self, f: F) -> String
+        where
+            F: FnOnce(BigUint, u64) -> String,
+        {
             let (radix, mantissa) = self.to_parts();
             f(radix, mantissa)
         }
@@ -1274,7 +1311,7 @@ pub mod mutez {
     }
 }
 
-pub use mutez::{ Mutez, MutezPlus };
+pub use mutez::{Mutez, MutezPlus};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Hash)]
 /// Representation of a rational number as a numerator-denominator pair, both of which
@@ -1335,7 +1372,10 @@ pub struct InvalidDiscriminantError<T> {
 }
 
 impl<T> InvalidDiscriminantError<T> {
-    pub(self) fn from_raw(raw: u8) -> Self where T: std::any::Any {
+    pub(self) fn from_raw(raw: u8) -> Self
+    where
+        T: std::any::Any,
+    {
         Self {
             raw,
             _proxy: std::marker::PhantomData::<T>,
@@ -1345,7 +1385,9 @@ impl<T> InvalidDiscriminantError<T> {
 
 impl<T: std::any::Any> std::fmt::Debug for InvalidDiscriminantError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InvalidDiscriminantError").field("raw", &self.raw).finish()
+        f.debug_struct("InvalidDiscriminantError")
+            .field("raw", &self.raw)
+            .finish()
     }
 }
 
@@ -1374,13 +1416,16 @@ impl VotingPeriodKind {
     ///
     /// Will panic if `raw` is invalid as a discriminant of this type (i.e. `raw > 4`).
     pub fn from_u8(raw: u8) -> Self {
-        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
+        assert!(
+            raw < 5,
+            "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]"
+        );
         unsafe { Self::from_u8_unchecked(raw) }
     }
 
     pub fn try_from_u8(raw: u8) -> Result<Self, InvalidDiscriminantError<Self>> {
         match raw {
-            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) }
+            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) },
             _ => Err(InvalidDiscriminantError::<Self>::from_raw(raw)),
         }
     }

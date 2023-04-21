@@ -1,12 +1,10 @@
-use tezos_codegen::proto016_ptmumbai::{ block_info, constants };
+use tezos_codegen::proto016_ptmumbai::{block_info, constants};
 
 pub mod error {
     use std::convert::Infallible;
 
     use crate::core::{
-        ballot::InvalidBallotError,
-        InvalidDiscriminantError,
-        InvalidSignatureV1ByteLengthError,
+        ballot::InvalidBallotError, InvalidDiscriminantError, InvalidSignatureV1ByteLengthError,
         VotingPeriodKind,
     };
 
@@ -55,8 +53,7 @@ pub mod error {
 
     impl From<Infallible> for MumbaiConversionError {
         fn from(value: Infallible) -> Self {
-            match value {
-            }
+            match value {}
         }
     }
 
@@ -76,7 +73,10 @@ pub mod error {
 
     impl std::fmt::Display for UnexpectedSignaturePrefixError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "found unexpected signature prefix in non-final position of contents-list")
+            write!(
+                f,
+                "found unexpected signature prefix in non-final position of contents-list"
+            )
         }
     }
 
@@ -144,39 +144,23 @@ pub mod raw {
 }
 
 pub mod api {
-    use super::raw::{ self, block_info };
-    use num::{ BigInt, BigUint };
-    use tedium::{ u30, Dynamic, Sequence };
-    use tezos_codegen::{
-        proto016_ptmumbai::block_info::{
-            Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo,
-            Proto016PtMumbaiEntrypoint,
-            Proto016PtMumbaiOperationAlphaContentsTransactionParameters,
-            Proto016PtMumbaiContractId,
-            proto016ptmumbaicontractid::Implicit,
-            Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
-        },
+    use super::raw::{self, block_info};
+    use num::{BigInt, BigUint};
+    use tedium::{u30, Dynamic, Sequence};
+    use tezos_codegen::proto016_ptmumbai::block_info::{
+        proto016ptmumbaicontractid::Implicit,
+        Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo, Proto016PtMumbaiContractId,
+        Proto016PtMumbaiEntrypoint, Proto016PtMumbaiOperationAlphaContentsTransactionParameters,
+        Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
     };
 
     use crate::{
         core::{
-            ballot::InvalidBallotError,
-            BlockHash,
-            ChainId,
-            InvalidDiscriminantError,
-            NonceHash,
-            OperationHash,
-            ProtocolHash,
-            PublicKeyHashV1,
-            RatioU16,
-            SignatureV1,
-            VotingPeriodKind,
-            mutez::MutezPlus,
-            transaction::Entrypoint,
-            ContractHash,
-            ContractId,
+            ballot::InvalidBallotError, mutez::MutezPlus, transaction::Entrypoint, BlockHash,
+            ChainId, ContractHash, ContractId, InvalidDiscriminantError, NonceHash, OperationHash,
+            ProtocolHash, PublicKeyHashV1, RatioU16, SignatureV1, Timestamp, VotingPeriodKind,
         },
-        traits::{ ContainsBallots, ContainsProposals, Crypto, ContainsTransactions },
+        traits::{ContainsBallots, ContainsProposals, ContainsTransactions, Crypto},
         util::abstract_unpack_dynseq,
     };
 
@@ -217,18 +201,15 @@ pub mod api {
         type ProposalsType = MumbaiProposals;
 
         fn has_proposals(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_proposals()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_proposals()))
         }
 
         fn count_proposals(&self) -> usize {
             self.operations
                 .iter()
-                .map(|ops|
-                    ops
-                        .iter()
-                        .map(|op| op.count_proposals())
-                        .sum::<usize>()
-                )
+                .map(|ops| ops.iter().map(|op| op.count_proposals()).sum::<usize>())
                 .sum()
         }
 
@@ -244,18 +225,15 @@ pub mod api {
         type TransactionType = MumbaiTransaction;
 
         fn has_transactions(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_transactions()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_transactions()))
         }
 
         fn count_transactions(&self) -> usize {
             self.operations
                 .iter()
-                .map(|ops|
-                    ops
-                        .iter()
-                        .map(|op| op.count_transactions())
-                        .sum::<usize>()
-                )
+                .map(|ops| ops.iter().map(|op| op.count_transactions()).sum::<usize>())
                 .sum()
         }
 
@@ -271,18 +249,15 @@ pub mod api {
         type BallotType = MumbaiBallot;
 
         fn has_ballots(&self) -> bool {
-            self.operations.iter().any(|ops| ops.iter().any(|op| op.has_ballots()))
+            self.operations
+                .iter()
+                .any(|ops| ops.iter().any(|op| op.has_ballots()))
         }
 
         fn count_ballots(&self) -> usize {
             self.operations
                 .iter()
-                .map(|ops|
-                    ops
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum::<usize>()
-                )
+                .map(|ops| ops.iter().map(|op| op.count_ballots()).sum::<usize>())
                 .sum()
         }
 
@@ -314,7 +289,7 @@ pub mod api {
         level: i32,
         proto: u8,
         predecessor: crate::core::BlockHash,
-        timestamp: crate::core::Timestamp,
+        timestamp: Timestamp,
         validation_pass: u8,
         operations_hash: crate::core::OperationListListHash,
         fitness: Vec<tedium::Bytes>,
@@ -331,6 +306,10 @@ pub mod api {
         pub fn level(&self) -> i32 {
             self.level
         }
+
+        pub fn timestamp(&self) -> Timestamp {
+            self.timestamp
+        }
     }
 
     impl TryFrom<raw::block_info::RawBlockHeader> for MumbaiBlockHeader {
@@ -341,27 +320,28 @@ pub mod api {
                 level: value.level,
                 proto: value.proto,
                 predecessor: BlockHash::from_fixed_bytes(value.predecessor.block_hash),
-                timestamp: crate::core::Timestamp::from_i64(value.timestamp),
+                timestamp: Timestamp::from_i64(value.timestamp),
                 validation_pass: value.validation_pass,
                 operations_hash: crate::core::OperationListListHash::from_fixed_bytes(
-                    value.operations_hash.operation_list_list_hash
+                    value.operations_hash.operation_list_list_hash,
                 ),
-                fitness: value.fitness
+                fitness: value
+                    .fitness
                     .into_inner()
                     .into_iter()
                     .map(|elt| elt.into_inner())
                     .collect(),
                 context: crate::core::ContextHash::from_fixed_bytes(value.context.context_hash),
                 payload_hash: crate::core::ValueHash::from_fixed_bytes(
-                    value.payload_hash.value_hash
+                    value.payload_hash.value_hash,
                 ),
                 payload_round: value.payload_round,
                 proof_of_work_nonce: MumbaiProofOfWorkNonce::from_fixed_bytes(
-                    value.proof_of_work_nonce
+                    value.proof_of_work_nonce,
                 ),
-                seed_nonce_hash: value.seed_nonce_hash.map(|nonce|
-                    NonceHash::from_fixed_bytes(nonce.cycle_nonce)
-                ),
+                seed_nonce_hash: value
+                    .seed_nonce_hash
+                    .map(|nonce| NonceHash::from_fixed_bytes(nonce.cycle_nonce)),
                 liquidity_baking_toggle_vote: value.liquidity_baking_toggle_vote,
                 signature: crate::core::SignatureV1::try_from_bytes(value.signature.signature_v1)?,
             })
@@ -529,34 +509,24 @@ pub mod api {
         fn count_transactions(&self) -> usize {
             match self {
                 MumbaiOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_transactions())
-                        .sum()
+                    contents.iter().map(|op| op.count_transactions()).sum()
                 }
                 MumbaiOperationContainer::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_transactions())
-                        .sum()
+                    contents.iter().map(|op| op.count_transactions()).sum()
                 }
             }
         }
 
         fn get_transactions(&self) -> Vec<Self::TransactionType> {
             match self {
-                MumbaiOperationContainer::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_transactions())
-                        .collect()
-                }
-                MumbaiOperationContainer::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_transactions())
-                        .collect()
-                }
+                MumbaiOperationContainer::WithoutMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(|op| op.get_transactions())
+                    .collect(),
+                MumbaiOperationContainer::WithMetadata { contents, .. } => contents
+                    .iter()
+                    .flat_map(|op| op.get_transactions())
+                    .collect(),
             }
         }
     }
@@ -576,16 +546,10 @@ pub mod api {
         fn count_proposals(&self) -> usize {
             match self {
                 Self::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_proposals())
-                        .sum()
+                    contents.iter().map(|op| op.count_proposals()).sum()
                 }
                 Self::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_proposals())
-                        .sum()
+                    contents.iter().map(|op| op.count_proposals()).sum()
                 }
             }
         }
@@ -593,16 +557,10 @@ pub mod api {
         fn get_proposals(&self) -> Vec<Self::ProposalsType> {
             match self {
                 Self::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_proposals())
-                        .collect()
+                    contents.iter().flat_map(|op| op.get_proposals()).collect()
                 }
                 Self::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_proposals())
-                        .collect()
+                    contents.iter().flat_map(|op| op.get_proposals()).collect()
                 }
             }
         }
@@ -623,16 +581,10 @@ pub mod api {
         fn count_ballots(&self) -> usize {
             match self {
                 Self::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum()
+                    contents.iter().map(|op| op.count_ballots()).sum()
                 }
                 Self::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .map(|op| op.count_ballots())
-                        .sum()
+                    contents.iter().map(|op| op.count_ballots()).sum()
                 }
             }
         }
@@ -640,16 +592,10 @@ pub mod api {
         fn get_ballots(&self) -> Vec<Self::BallotType> {
             match self {
                 Self::WithoutMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect()
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
                 }
                 Self::WithMetadata { contents, .. } => {
-                    contents
-                        .iter()
-                        .flat_map(|op| op.get_ballots())
-                        .collect()
+                    contents.iter().flat_map(|op| op.get_ballots()).collect()
                 }
             }
         }
@@ -685,7 +631,7 @@ pub mod api {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: raw::block_info::proto016ptmumbaioperationalphacontents::Ballot
+            value: raw::block_info::proto016ptmumbaioperationalphacontents::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -697,11 +643,12 @@ pub mod api {
     }
 
     impl TryFrom<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Ballot>
-    for MumbaiBallot {
+        for MumbaiBallot
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Ballot
+            value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -713,11 +660,12 @@ pub mod api {
     }
 
     impl TryFrom<raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot>
-    for MumbaiBallot {
+        for MumbaiBallot
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot
+            value: raw::block_info::proto016ptmumbaioperationalphacontentsorsignatureprefix::Ballot,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -753,7 +701,11 @@ pub mod api {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "Account `")?;
             self.source.base58check_fmt(f)?;
-            writeln!(f, "` proposed the following protocols during period {}:", self.period)?;
+            writeln!(
+                f,
+                "` proposed the following protocols during period {}:",
+                self.period
+            )?;
             for proposal in self.proposals.iter() {
                 writeln!(f, "\t")?;
                 proposal.base58check_fmt(f)?;
@@ -781,7 +733,8 @@ pub mod api {
             Self {
                 source: value.source.signature_public_key_hash.into(),
                 period: value.period,
-                proposals: value.proposals
+                proposals: value
+                    .proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -795,7 +748,8 @@ pub mod api {
             Self {
                 source: value.source.signature_public_key_hash.into(),
                 period: value.period,
-                proposals: value.proposals
+                proposals: value
+                    .proposals
                     .into_inner()
                     .into_iter()
                     .map(|proposal| proposal.protocol_hash.into())
@@ -870,12 +824,11 @@ pub mod api {
         }
     }
 
-    impl TryFrom<raw::block_info::Proto016PtMumbaiOperationAlphaContents>
-    for MumbaiOperationContents {
+    impl TryFrom<raw::block_info::Proto016PtMumbaiOperationAlphaContents> for MumbaiOperationContents {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: raw::block_info::Proto016PtMumbaiOperationAlphaContents
+            value: raw::block_info::Proto016PtMumbaiOperationAlphaContents,
         ) -> Result<Self, Self::Error> {
             match value {
                 block_info::Proto016PtMumbaiOperationAlphaContents::Ballot(ballot) => {
@@ -897,8 +850,9 @@ pub mod api {
     impl From<Proto016PtMumbaiContractId> for MumbaiContractId {
         fn from(value: Proto016PtMumbaiContractId) -> Self {
             match value {
-                Proto016PtMumbaiContractId::Implicit(Implicit { signature_public_key_hash }) =>
-                    Self::Implicit(PublicKeyHashV1::from(signature_public_key_hash)),
+                Proto016PtMumbaiContractId::Implicit(Implicit {
+                    signature_public_key_hash,
+                }) => Self::Implicit(PublicKeyHashV1::from(signature_public_key_hash)),
                 Proto016PtMumbaiContractId::Originated(originated) => {
                     let ch = originated.0.into_inner();
                     Self::Originated(ContractHash::from_fixed_bytes(ch.contract_hash))
@@ -908,7 +862,10 @@ pub mod api {
     }
 
     impl serde::Serialize for MumbaiContractId {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
             if serializer.is_human_readable() {
                 serializer.serialize_str(&self.to_base58check())
             } else {
@@ -945,9 +902,10 @@ pub mod api {
     }
 
     impl From<Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters>
-    for MumbaiTransactionParameters {
+        for MumbaiTransactionParameters
+    {
         fn from(
-            value: Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters
+            value: Proto016PtMumbaiOperationAlphaOperationContentsAndResultTransactionParameters,
         ) -> Self {
             Self {
                 entrypoint: value.entrypoint.into(),
@@ -957,7 +915,8 @@ pub mod api {
     }
 
     impl From<Proto016PtMumbaiOperationAlphaContentsTransactionParameters>
-    for MumbaiTransactionParameters {
+        for MumbaiTransactionParameters
+    {
         fn from(value: Proto016PtMumbaiOperationAlphaContentsTransactionParameters) -> Self {
             Self {
                 entrypoint: value.entrypoint.into(),
@@ -1014,9 +973,10 @@ pub mod api {
     }
 
     impl From<raw::block_info::proto016ptmumbaioperationalphacontents::Transaction>
-    for MumbaiTransaction {
+        for MumbaiTransaction
+    {
         fn from(
-            value: raw::block_info::proto016ptmumbaioperationalphacontents::Transaction
+            value: raw::block_info::proto016ptmumbaioperationalphacontents::Transaction,
         ) -> Self {
             Self {
                 source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -1031,10 +991,12 @@ pub mod api {
         }
     }
 
-    impl From<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction>
-    for MumbaiTransaction {
+    impl
+        From<raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction>
+        for MumbaiTransaction
+    {
         fn from(
-            value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction
+            value: raw::block_info::proto016ptmumbaioperationalphaoperationcontentsandresult::Transaction,
         ) -> Self {
             Self {
                 source: PublicKeyHashV1::from(value.source.signature_public_key_hash),
@@ -1151,11 +1113,12 @@ pub mod api {
     }
 
     impl TryFrom<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>
-    for MumbaiOperationContentsAndResult {
+        for MumbaiOperationContentsAndResult
+    {
         type Error = InvalidBallotError;
 
         fn try_from(
-            value: block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult
+            value: block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult,
         ) -> Result<Self, Self::Error> {
             match value {
                 block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult::Ballot(
@@ -1175,8 +1138,8 @@ pub mod api {
     fn unpack_operation_contents_and_result(
         contents: Dynamic<
             u30,
-            Sequence<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>
-        >
+            Sequence<block_info::Proto016PtMumbaiOperationAlphaOperationContentsAndResult>,
+        >,
     ) -> Result<Vec<MumbaiOperationContentsAndResult>, InvalidBallotError> {
         contents
             .into_inner()
@@ -1189,7 +1152,7 @@ pub mod api {
         type Error = super::error::MumbaiConversionError;
 
         fn try_from(value: raw::block_info::OperationDenestDyn) -> Result<Self, Self::Error> {
-            use block_info::{ operationdenestdyn, OperationDenestDyn::* };
+            use block_info::{operationdenestdyn, OperationDenestDyn::*};
             match value {
                 Operation_with_too_large_metadata(
                     operationdenestdyn::Operation_with_too_large_metadata {
@@ -1270,7 +1233,7 @@ pub mod api {
     }
 
     fn unpack_operation_contents(
-        contents: Dynamic<u30, Sequence<block_info::Proto016PtMumbaiOperationAlphaContents>>
+        contents: Dynamic<u30, Sequence<block_info::Proto016PtMumbaiOperationAlphaContents>>,
     ) -> Result<Vec<MumbaiOperationContents>, MumbaiConversionError> {
         contents
             .into_inner()
@@ -1280,11 +1243,11 @@ pub mod api {
     }
 
     mod content_filter {
-        use tedium::{ Decode, Encode, FixedBytes };
+        use tedium::{Decode, Encode, FixedBytes};
 
         use crate::{
-            core::{ ballot::InvalidBallotError, SignatureV1 },
-            mumbai::error::{ MumbaiConversionError, UnexpectedSignaturePrefixError },
+            core::{ballot::InvalidBallotError, SignatureV1},
+            mumbai::error::{MumbaiConversionError, UnexpectedSignaturePrefixError},
         };
 
         use super::MumbaiOperationContents;
@@ -1293,7 +1256,7 @@ pub mod api {
             crate::mumbai::raw::block_info::Proto016PtMumbaiOperationAlphaContentsOrSignaturePrefix;
 
         fn transcode_contents_without_sig(
-            value: ContentsOrSigPref
+            value: ContentsOrSigPref,
         ) -> Result<MumbaiOperationContents, InvalidBallotError> {
             let buf = value.to_bytes();
             let raw =
@@ -1316,10 +1279,13 @@ pub mod api {
         }
 
         pub(super) fn split_operations_sig_prefix(
-            elts: Vec<ContentsOrSigPref>
+            elts: Vec<ContentsOrSigPref>,
         ) -> Result<
-            (Vec<super::MumbaiOperationContents>, Option<tedium::FixedBytes<32>>),
-            MumbaiConversionError
+            (
+                Vec<super::MumbaiOperationContents>,
+                Option<tedium::FixedBytes<32>>,
+            ),
+            MumbaiConversionError,
         > {
             let mut iter = elts.into_iter();
             let opt_sig_prefix = {
@@ -1346,7 +1312,7 @@ pub mod api {
 
         pub(super) fn sigv1_from_parts(
             opt_sig_prefix: Option<tedium::FixedBytes<32>>,
-            signature_suffix: FixedBytes<64>
+            signature_suffix: FixedBytes<64>,
         ) -> SignatureV1 {
             match opt_sig_prefix {
                 Some(pref) => {
@@ -1397,14 +1363,15 @@ pub mod api {
                 max_operation_data_length: value.max_operation_data_length.to_i32(),
                 max_block_header_length: value.max_block_header_length.to_i32(),
                 max_operation_list_length: unpack_max_operation_list_length(
-                    value.max_operation_list_length
+                    value.max_operation_list_length,
                 ),
                 proposer: value.proposer.signature_public_key_hash.into(),
                 baker: value.baker.signature_public_key_hash.into(),
                 level_info: value.level_info.into(),
                 voting_period_info: value.voting_period_info.try_into()?,
                 nonce_hash: unpack_metadata_nonce_hash(value.nonce_hash),
-                deactivated: value.deactivated
+                deactivated: value
+                    .deactivated
                     .into_inner()
                     .into_iter()
                     .map(|elt| elt.into())
@@ -1412,18 +1379,24 @@ pub mod api {
                 balance_updates: abstract_unpack_dynseq(value.balance_updates),
                 liquidity_baking_toggle_ema: value.liquidity_baking_toggle_ema.into(),
                 implicit_operations_results: abstract_unpack_dynseq(
-                    value.implicit_operations_results
+                    value.implicit_operations_results,
                 ),
-                proposer_consensus_key: value.proposer_consensus_key.signature_public_key_hash.into(),
+                proposer_consensus_key: value
+                    .proposer_consensus_key
+                    .signature_public_key_hash
+                    .into(),
                 baker_consensus_key: value.baker_consensus_key.signature_public_key_hash.into(),
                 consumed_milligas: value.consumed_milligas.into_inner(),
-                dal_attestation: value.dal_attestation.into_inner().map(|elt| elt.into_inner()),
+                dal_attestation: value
+                    .dal_attestation
+                    .into_inner()
+                    .map(|elt| elt.into_inner()),
             })
         }
     }
 
     fn unpack_metadata_nonce_hash(
-        nonce_hash: block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataNonceHash
+        nonce_hash: block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataNonceHash,
     ) -> Option<NonceHash> {
         match nonce_hash {
             raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataNonceHash::None(_) => None,
@@ -1442,7 +1415,7 @@ pub mod api {
                 u30,
                 Sequence<block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq>
             >
-        >
+        >,
     ) -> Vec<block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq> {
         max_operation_list_length
             .into_inner()
@@ -1477,12 +1450,15 @@ pub mod api {
         }
     }
 
-    impl TryFrom<raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod>
-    for MumbaiVotingPeriod {
+    impl
+        TryFrom<
+            raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
+        > for MumbaiVotingPeriod
+    {
         type Error = crate::core::InvalidDiscriminantError<VotingPeriodKind>;
 
         fn try_from(
-            value: raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod
+            value: raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfoVotingPeriod,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 index: value.index,
@@ -1500,18 +1476,20 @@ pub mod api {
     }
 
     impl tedium::Decode for MumbaiVotingPeriodInfo {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw = Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo::parse(p)?;
             Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
         }
     }
 
-    impl TryFrom<Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo>
-    for MumbaiVotingPeriodInfo {
+    impl TryFrom<Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo> for MumbaiVotingPeriodInfo {
         type Error = InvalidDiscriminantError<VotingPeriodKind>;
 
         fn try_from(
-            value: Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo
+            value: Proto016PtMumbaiBlockHeaderAlphaMetadataVotingPeriodInfo,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
                 voting_period: value.voting_period.try_into()?,
@@ -1527,16 +1505,21 @@ pub mod api {
         max_operations_ttl: i32,
         max_operation_data_length: i32,
         max_block_header_length: i32,
-        max_operation_list_length: Vec<raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq>,
+        max_operation_list_length: Vec<
+            raw::block_info::BlockHeaderMetadataMaxOperationListLengthDenestDynDenestDynDenestSeq,
+        >,
         proposer: PublicKeyHashV1,
         baker: PublicKeyHashV1,
         level_info: MumbaiLevelInfo,
         voting_period_info: MumbaiVotingPeriodInfo,
         nonce_hash: Option<NonceHash>,
-        deactivated: Vec<raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq>,
+        deactivated: Vec<
+            raw::block_info::Proto016PtMumbaiBlockHeaderAlphaMetadataDeactivatedDenestDynDenestSeq,
+        >,
         balance_updates: Vec<raw::block_info::Proto016PtMumbaiOperationMetadataAlphaBalance>,
         liquidity_baking_toggle_ema: i32,
-        implicit_operations_results: Vec<raw::block_info::Proto016PtMumbaiOperationAlphaSuccessfulManagerOperationResult>,
+        implicit_operations_results:
+            Vec<raw::block_info::Proto016PtMumbaiOperationAlphaSuccessfulManagerOperationResult>,
         proposer_consensus_key: PublicKeyHashV1,
         baker_consensus_key: PublicKeyHashV1,
         consumed_milligas: BigUint,
@@ -1554,7 +1537,10 @@ pub mod api {
                     chain_id: value.chain_id.chain_id.into(),
                     hash: value.hash.block_hash.into(),
                     header: value.header.into_inner().try_into()?,
-                    metadata: value.metadata.map(|x| x.into_inner().try_into()).transpose()?, // FIXME[epic=facade]
+                    metadata: value
+                        .metadata
+                        .map(|x| x.into_inner().try_into())
+                        .transpose()?, // FIXME[epic=facade]
                     operations: unpack_block_operations(value.operations)?,
                 })
             }
@@ -1563,8 +1549,8 @@ pub mod api {
         fn unpack_block_operations(
             operations: Dynamic<
                 u30,
-                Sequence<Dynamic<u30, Dynamic<u30, Sequence<crate::mumbai::raw::Operation>>>>
-            >
+                Sequence<Dynamic<u30, Dynamic<u30, Sequence<crate::mumbai::raw::Operation>>>>,
+            >,
         ) -> Result<Vec<Vec<MumbaiOperation>>, MumbaiConversionError> {
             operations
                 .into_inner()
@@ -1580,7 +1566,10 @@ pub mod api {
         }
 
         impl tedium::Decode for MumbaiBlockInfo {
-            fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+            fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+            where
+                Self: Sized,
+            {
                 let raw = <crate::mumbai::raw::BlockInfo as tedium::Decode>::parse(p)?;
                 Ok(raw.try_into().map_err(tedium::ParseError::reify)?)
             }
@@ -1602,8 +1591,7 @@ pub mod api {
         number_of_shards: u16,
     }
 
-    impl From<raw::constants::Proto016PtMumbaiConstantsDalParametric>
-    for MumbaiConstantsDalParametric {
+    impl From<raw::constants::Proto016PtMumbaiConstantsDalParametric> for MumbaiConstantsDalParametric {
         fn from(value: raw::constants::Proto016PtMumbaiConstantsDalParametric) -> Self {
             Self {
                 feature_enable: value.feature_enable,
@@ -1743,12 +1731,18 @@ pub mod api {
                 max_proposals_per_delegate: value.max_proposals_per_delegate,
                 max_micheline_node_count: value.max_micheline_node_count.to_i32(),
                 max_micheline_bytes_limit: value.max_micheline_bytes_limit.to_i32(),
-                max_allowed_global_constants_depth: value.max_allowed_global_constants_depth.to_i32(),
+                max_allowed_global_constants_depth: value
+                    .max_allowed_global_constants_depth
+                    .to_i32(),
                 cache_layout_size: value.cache_layout_size,
                 michelson_maximum_type_size: value.michelson_maximum_type_size,
-                smart_rollup_max_wrapped_proof_binary_size: value.smart_rollup_max_wrapped_proof_binary_size.to_i32(),
+                smart_rollup_max_wrapped_proof_binary_size: value
+                    .smart_rollup_max_wrapped_proof_binary_size
+                    .to_i32(),
                 smart_rollup_message_size_limit: value.smart_rollup_message_size_limit.to_i32(),
-                smart_rollup_max_number_of_messages_per_level: value.smart_rollup_max_number_of_messages_per_level.into_inner(),
+                smart_rollup_max_number_of_messages_per_level: value
+                    .smart_rollup_max_number_of_messages_per_level
+                    .into_inner(),
                 preserved_cycles: value.preserved_cycles,
                 blocks_per_cycle: value.blocks_per_cycle,
                 blocks_per_commitment: value.blocks_per_commitment,
@@ -1766,7 +1760,9 @@ pub mod api {
                 baking_reward_bonus_per_slot: value.baking_reward_bonus_per_slot.into_inner(),
                 endorsing_reward_per_slot: value.endorsing_reward_per_slot.into_inner(),
                 cost_per_byte: value.cost_per_byte.into_inner(),
-                hard_storage_limit_per_operation: value.hard_storage_limit_per_operation.into_inner(),
+                hard_storage_limit_per_operation: value
+                    .hard_storage_limit_per_operation
+                    .into_inner(),
                 quorum_min: value.quorum_min,
                 quorum_max: value.quorum_max,
                 min_proposal_quorum: value.min_proposal_quorum,
@@ -1781,43 +1777,68 @@ pub mod api {
                 max_slashing_period: value.max_slashing_period.to_i32(),
                 frozen_deposits_percentage: value.frozen_deposits_percentage.to_i32(),
                 double_baking_punishment: value.double_baking_punishment.into_inner(),
-                ratio_of_frozen_deposits_slashed_per_double_endorsement: value.ratio_of_frozen_deposits_slashed_per_double_endorsement.into(),
-                testnet_dictator: value.testnet_dictator.map(|pkh_raw|
-                    pkh_raw.signature_public_key_hash.into()
-                ),
+                ratio_of_frozen_deposits_slashed_per_double_endorsement: value
+                    .ratio_of_frozen_deposits_slashed_per_double_endorsement
+                    .into(),
+                testnet_dictator: value
+                    .testnet_dictator
+                    .map(|pkh_raw| pkh_raw.signature_public_key_hash.into()),
                 initial_seed: value.initial_seed.map(|seed_raw| seed_raw.random.into()),
                 cache_script_size: value.cache_script_size.to_i32(),
                 cache_stake_distribution_cycles: value.cache_stake_distribution_cycles,
                 cache_sampler_state_cycles: value.cache_sampler_state_cycles,
                 tx_rollup_enable: value.tx_rollup_enable,
                 tx_rollup_origination_size: value.tx_rollup_origination_size.to_i32(),
-                tx_rollup_hard_size_limit_per_inbox: value.tx_rollup_hard_size_limit_per_inbox.to_i32(),
-                tx_rollup_hard_size_limit_per_message: value.tx_rollup_hard_size_limit_per_message.to_i32(),
-                tx_rollup_max_withdrawals_per_batch: value.tx_rollup_max_withdrawals_per_batch.to_i32(),
+                tx_rollup_hard_size_limit_per_inbox: value
+                    .tx_rollup_hard_size_limit_per_inbox
+                    .to_i32(),
+                tx_rollup_hard_size_limit_per_message: value
+                    .tx_rollup_hard_size_limit_per_message
+                    .to_i32(),
+                tx_rollup_max_withdrawals_per_batch: value
+                    .tx_rollup_max_withdrawals_per_batch
+                    .to_i32(),
                 tx_rollup_commitment_bond: value.tx_rollup_commitment_bond.into_inner(),
                 tx_rollup_finality_period: value.tx_rollup_finality_period.to_i32(),
                 tx_rollup_withdraw_period: value.tx_rollup_withdraw_period.to_i32(),
                 tx_rollup_max_inboxes_count: value.tx_rollup_max_inboxes_count.to_i32(),
                 tx_rollup_max_messages_per_inbox: value.tx_rollup_max_messages_per_inbox.to_i32(),
                 tx_rollup_max_commitments_count: value.tx_rollup_max_commitments_count.to_i32(),
-                tx_rollup_cost_per_byte_ema_factor: value.tx_rollup_cost_per_byte_ema_factor.to_i32(),
+                tx_rollup_cost_per_byte_ema_factor: value
+                    .tx_rollup_cost_per_byte_ema_factor
+                    .to_i32(),
                 tx_rollup_max_ticket_payload_size: value.tx_rollup_max_ticket_payload_size.to_i32(),
-                tx_rollup_rejection_max_proof_size: value.tx_rollup_rejection_max_proof_size.to_i32(),
+                tx_rollup_rejection_max_proof_size: value
+                    .tx_rollup_rejection_max_proof_size
+                    .to_i32(),
                 tx_rollup_sunset_level: value.tx_rollup_sunset_level,
                 dal_parametric: value.dal_parametric.into(),
                 smart_rollup_enable: value.smart_rollup_enable,
                 smart_rollup_arith_pvm_enable: value.smart_rollup_arith_pvm_enable,
                 smart_rollup_origination_size: value.smart_rollup_origination_size.to_i32(),
-                smart_rollup_challenge_window_in_blocks: value.smart_rollup_challenge_window_in_blocks.to_i32(),
+                smart_rollup_challenge_window_in_blocks: value
+                    .smart_rollup_challenge_window_in_blocks
+                    .to_i32(),
                 smart_rollup_stake_amount: value.smart_rollup_stake_amount.into_inner(),
-                smart_rollup_commitment_period_in_blocks: value.smart_rollup_commitment_period_in_blocks.to_i32(),
+                smart_rollup_commitment_period_in_blocks: value
+                    .smart_rollup_commitment_period_in_blocks
+                    .to_i32(),
                 smart_rollup_max_lookahead_in_blocks: value.smart_rollup_max_lookahead_in_blocks,
                 smart_rollup_max_active_outbox_levels: value.smart_rollup_max_active_outbox_levels,
-                smart_rollup_max_outbox_messages_per_level: value.smart_rollup_max_outbox_messages_per_level.to_i32(),
-                smart_rollup_number_of_sections_in_dissection: value.smart_rollup_number_of_sections_in_dissection,
-                smart_rollup_timeout_period_in_blocks: value.smart_rollup_timeout_period_in_blocks.to_i32(),
-                smart_rollup_max_number_of_cemented_commitments: value.smart_rollup_max_number_of_cemented_commitments.to_i32(),
-                smart_rollup_max_number_of_parallel_games: value.smart_rollup_max_number_of_parallel_games.to_i32(),
+                smart_rollup_max_outbox_messages_per_level: value
+                    .smart_rollup_max_outbox_messages_per_level
+                    .to_i32(),
+                smart_rollup_number_of_sections_in_dissection: value
+                    .smart_rollup_number_of_sections_in_dissection,
+                smart_rollup_timeout_period_in_blocks: value
+                    .smart_rollup_timeout_period_in_blocks
+                    .to_i32(),
+                smart_rollup_max_number_of_cemented_commitments: value
+                    .smart_rollup_max_number_of_cemented_commitments
+                    .to_i32(),
+                smart_rollup_max_number_of_parallel_games: value
+                    .smart_rollup_max_number_of_parallel_games
+                    .to_i32(),
                 zk_rollup_enable: value.zk_rollup_enable,
                 zk_rollup_origination_size: value.zk_rollup_origination_size.to_i32(),
                 zk_rollup_min_pending_to_process: value.zk_rollup_min_pending_to_process.to_i32(),
@@ -1826,7 +1847,10 @@ pub mod api {
     }
 
     impl tedium::Decode for MumbaiConstants {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
+        where
+            Self: Sized,
+        {
             let raw = MumbaiRawConstants::parse(p)?;
             Ok(raw.into())
         }
