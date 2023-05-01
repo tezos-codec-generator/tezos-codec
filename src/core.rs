@@ -550,7 +550,7 @@ impl crate::traits::StaticPrefix for BlindedPublicKeyHash {
 
 impl Crypto for BlindedPublicKeyHash {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum PublicKeyHashV0 {
     Ed25519(FixedBytes<20>),
     Secp256k1(FixedBytes<20>),
@@ -700,7 +700,7 @@ impl DynamicPrefix for PublicKeyHashV0 {
 
 impl Crypto for PublicKeyHashV0 {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum PublicKeyHashV1 {
     PkhV0(PublicKeyHashV0),
     Bls(FixedBytes<20>),
