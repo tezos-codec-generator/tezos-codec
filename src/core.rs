@@ -38,9 +38,10 @@ macro_rules! boilerplate {
             }
         )+
     };
-    ($($tname:ident = $n:literal),+ $(,)?) => {
+    ( $( $( @attr $m:meta for ) ?$tname:ident = $n:literal),+ $(,)?) => {
         $(
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, tedium::Decode)]
+            $( #[$m] )?
             pub struct $tname(::tedium::FixedBytes<$n>);
 
             impl $crate::traits::AsPayload for $tname {
@@ -197,7 +198,7 @@ impl StaticPrefix for BlockHash {
 
 impl Crypto for BlockHash {}
 
-boilerplate!(ContractHash = 20);
+boilerplate!(@attr derive(PartialOrd,Ord) for ContractHash = 20);
 
 impl ContractHash {
     /// Preimage of ciphertext prefix `KT1`
@@ -233,7 +234,7 @@ impl CryptoExt for ContractHash {
 impl_crypto_display!(ContractHash);
 impl_serde_crypto!(ContractHash);
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum ContractId<Pkh> {
     Implicit(Pkh),
     Originated(ContractHash),
