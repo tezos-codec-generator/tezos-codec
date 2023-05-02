@@ -1,4 +1,6 @@
-use base58::ToBase58;
+use std::convert::Infallible;
+
+use base58::{FromBase58, FromBase58Error, ToBase58};
 use sha2::{Digest, Sha256};
 
 /// Performs a two-fold iterated SHA256 digest of a byte slice
@@ -33,17 +35,95 @@ pub fn to_base58check(prefix: &'static [u8], payload: &[u8]) -> String {
     safe_encode(&tmp)
 }
 
+#[derive(Debug)]
+pub enum FromBase58CheckError<E: 'static = Infallible> {
+    Base58(FromBase58Error),
+    Other(E),
+}
+
+impl<E> From<FromBase58Error> for FromBase58CheckError<E> {
+    fn from(value: FromBase58Error) -> Self {
+        Self::Base58(value)
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for FromBase58CheckError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FromBase58CheckError::Base58(b58_err) => {
+                write!(
+                    f,
+                    "error encountered during base58check decoding: {:?}",
+                    b58_err
+                )
+            }
+            FromBase58CheckError::Other(other) => {
+                write!(
+                    f,
+                    "error encountered during base58ccheck decoding: {}",
+                    other
+                )
+            }
+        }
+    }
+}
+
+impl<E: std::error::Error> std::error::Error for FromBase58CheckError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            FromBase58CheckError::Base58(_) => None,
+            FromBase58CheckError::Other(e) => Some(e),
+        }
+    }
+}
+
+pub fn from_base58check<S, E>(image: S) -> Result<Vec<u8>, FromBase58CheckError<E>>
+where
+    S: AsRef<str>,
+{
+    safe_decode(image.as_ref())
+}
+
+/// Removes the final four bytes of a slice
+///
+/// # Examples
+/// ```
+/// # use tezos_codec::core::base58::drop_four;
+/// assert_eq!(drop_four(&[1,2,3,4,5]), &[1]);
+/// ```
+pub fn drop_four<'a>(bytes: &'a [u8]) -> &'a [u8] {
+    let l = bytes.len();
+    bytes.split_at(l - 4).0
+}
+
+fn safe_decode<E>(image_str: &str) -> Result<Vec<u8>, FromBase58CheckError<E>> {
+    let full_plaintext = image_str.from_base58()?;
+    Ok(drop_four(&full_plaintext).to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn base58check_sanity() {
+    fn base58check_sanity_tz1() {
         assert_eq!(
             to_base58check(
                 &crate::core::PublicKeyHashV0::ED25519_BASE58_PREFIX,
                 &[0u8; 20]
             ),
             "tz1Ke2h7sDdakHJQh8WX4Z372du1KChsksyU"
+        );
+    }
+
+    #[test]
+    fn base58check_sanity_tz2() {
+        assert_eq!(
+            to_base58check(
+                &crate::core::PublicKeyHashV0::SECP256K1_BASE58_PREFIX,
+                &[0u8; 20]
+            ),
+            "tz28KEfLTo3wg2wGyJZMjC1MaDA1q68s6tz5"
         );
     }
 }

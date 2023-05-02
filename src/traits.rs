@@ -1,3 +1,5 @@
+use crate::core::base58::{from_base58check, FromBase58CheckError};
+
 /// Trait for types that store fixed-size binary data in a consistent
 /// way across multiple protocols
 pub trait BinaryDataType<const N: usize>: AsPayload + Copy {
@@ -131,6 +133,24 @@ pub trait Crypto: AsPayload + DynamicPrefix {
     /// representation of a Crypto type.
     fn base58check_fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(&self.to_base58check())
+    }
+}
+
+pub trait CryptoExt
+where
+    Self: Crypto + Sized,
+{
+    type Error;
+
+    fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error>;
+
+    fn parse_base58check<S: AsRef<str>>(
+        image: S,
+    ) -> Result<Self, FromBase58CheckError<Self::Error>> {
+        match from_base58check(image) {
+            Ok(raw) => Self::reconstruct(raw).map_err(|e| FromBase58CheckError::Other(e)),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

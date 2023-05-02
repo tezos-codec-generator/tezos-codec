@@ -4,7 +4,7 @@ pub mod rpc;
 pub mod transaction;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use std::{fmt::Display, hint::unreachable_unchecked};
+use std::{array::TryFromSliceError, fmt::Display, hint::unreachable_unchecked};
 
 use num::rational::Ratio;
 use tedium::FixedBytes;
@@ -105,6 +105,14 @@ macro_rules! boilerplate {
                 }
             }
 
+            impl TryFrom<Vec<u8>> for $tname {
+                type Error = std::array::TryFromSliceError;
+
+                fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+                    Ok(Self::from_byte_array(value.as_slice().try_into()?))
+                }
+            }
+
             impl TryFrom<&'_ [u8]> for $tname {
                 type Error = std::array::TryFromSliceError;
 
@@ -135,7 +143,7 @@ macro_rules! impl_serde_crypto {
 
 use crate::{
     impl_crypto_display,
-    traits::{AsPayload, Crypto, DynamicPrefix, StaticPrefix},
+    traits::{AsPayload, Crypto, CryptoExt, DynamicPrefix, StaticPrefix},
 };
 
 boilerplate!(OperationHash = 32);
@@ -206,6 +214,22 @@ impl StaticPrefix for ContractHash {
 }
 
 impl Crypto for ContractHash {}
+
+impl CryptoExt for ContractHash {
+    type Error = CryptoDecodeError;
+
+    fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error> {
+        let (_pref, bytes) = preimage.split_at(Self::BASE58_PREFIX.len());
+        if _pref == Self::BASE58_PREFIX {
+            Ok(Self(bytes.try_into()?))
+        } else {
+            Err(CryptoDecodeError::UnexpectedPrefix {
+                prefix_bytes: _pref.to_vec(),
+            })
+        }
+    }
+}
+
 impl_crypto_display!(ContractHash);
 impl_serde_crypto!(ContractHash);
 
@@ -293,6 +317,18 @@ impl<Pkh: DynamicPrefix> DynamicPrefix for ContractId<Pkh> {
 }
 
 impl<Pkh: Crypto> Crypto for ContractId<Pkh> {}
+
+impl<Pkh: CryptoExt<Error = CryptoDecodeError>> CryptoExt for ContractId<Pkh> {
+    type Error = CryptoDecodeError;
+
+    fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error> {
+        if &preimage[..3] == ContractHash::BASE58_PREFIX {
+            Ok(Self::Originated(ContractHash::reconstruct(preimage)?))
+        } else {
+            Ok(Self::Implicit(Pkh::reconstruct(preimage)?))
+        }
+    }
+}
 
 boilerplate!(ContextHash = 32);
 impl_crypto_display!(ContextHash);
@@ -698,7 +734,55 @@ impl DynamicPrefix for PublicKeyHashV0 {
     }
 }
 
+#[derive(Debug)]
+pub enum CryptoDecodeError {
+    FromSlice(std::array::TryFromSliceError),
+    UnexpectedPrefix { prefix_bytes: Vec<u8> },
+}
+
+impl std::fmt::Display for CryptoDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CryptoDecodeError::FromSlice(s_err) => write!(f, "CryptoExt decoding error: {}", s_err),
+            CryptoDecodeError::UnexpectedPrefix { prefix_bytes } => {
+                write!(f, "unexpected base58check prefix `{:#?}`", prefix_bytes)
+            }
+        }
+    }
+}
+
+impl std::error::Error for CryptoDecodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CryptoDecodeError::FromSlice(s) => Some(s),
+            CryptoDecodeError::UnexpectedPrefix { .. } => None,
+        }
+    }
+}
+
+impl From<TryFromSliceError> for CryptoDecodeError {
+    fn from(value: TryFromSliceError) -> Self {
+        Self::FromSlice(value)
+    }
+}
+
 impl Crypto for PublicKeyHashV0 {}
+
+impl CryptoExt for PublicKeyHashV0 {
+    type Error = CryptoDecodeError;
+
+    fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error> {
+        let (pref, bytes) = preimage.split_at(3);
+        match pref {
+            _ if pref == Self::ED25519_BASE58_PREFIX => Ok(Self::Ed25519(bytes.try_into()?)),
+            _ if pref == Self::SECP256K1_BASE58_PREFIX => Ok(Self::Secp256k1(bytes.try_into()?)),
+            _ if pref == Self::P256_BASE58_PREFIX => Ok(Self::P256(bytes.try_into()?)),
+            _ => Err(CryptoDecodeError::UnexpectedPrefix {
+                prefix_bytes: pref.to_vec(),
+            }),
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum PublicKeyHashV1 {
@@ -889,6 +973,18 @@ impl DynamicPrefix for PublicKeyHashV1 {
 }
 
 impl Crypto for PublicKeyHashV1 {}
+
+impl CryptoExt for PublicKeyHashV1 {
+    type Error = CryptoDecodeError;
+
+    fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error> {
+        let (pref, bytes) = preimage.split_at(3);
+        match pref {
+            _ if pref == Self::BLS12_381_BASE58_PREFIX => Ok(Self::Bls(bytes.try_into()?)),
+            _ => Ok(Self::PkhV0(PublicKeyHashV0::reconstruct(preimage)?)),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct AnachronisticTimestampError(i64);
@@ -1440,5 +1536,23 @@ impl VotingPeriodKind {
         let raw = self as u8;
         let prev_raw = (raw + 4) % 5;
         unsafe { Self::from_u8_unchecked(prev_raw) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn tz1_roundtrip(raw : [u8; 20]) {
+            let tz1 = PublicKeyHashV0::Ed25519(FixedBytes::from_array(raw));
+            let oput = tz1.to_base58check();
+            match PublicKeyHashV0::parse_base58check(&oput) {
+                Ok(rt_tz1) => assert_eq!(tz1, rt_tz1),
+                Err(e) => panic!("Failure in case `{oput}`: {e}"),
+            }
+        }
     }
 }
