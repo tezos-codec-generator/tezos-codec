@@ -1,4 +1,7 @@
-use crate::{ traits::{ Crypto, StaticPrefix }, impl_crypto_display, boilerplate };
+use crate::{
+    boilerplate, impl_crypto_display,
+    traits::{Crypto, StaticPrefix},
+};
 
 boilerplate!(OperationHash = 32);
 impl_crypto_display!(OperationHash);
