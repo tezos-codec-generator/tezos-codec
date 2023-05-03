@@ -3,8 +3,8 @@ pub mod base58;
 pub mod rpc;
 pub mod transaction;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
-use std::{array::TryFromSliceError, fmt::Display, hint::unreachable_unchecked};
+use chrono::{ DateTime, NaiveDateTime, Utc };
+use std::{ array::TryFromSliceError, fmt::Display, hint::unreachable_unchecked };
 
 use num::rational::Ratio;
 use tedium::FixedBytes;
@@ -144,59 +144,11 @@ macro_rules! impl_serde_crypto {
 
 use crate::{
     impl_crypto_display,
-    traits::{AsPayload, Crypto, CryptoExt, DynamicPrefix, StaticPrefix},
+    traits::{ AsPayload, Crypto, CryptoExt, DynamicPrefix, StaticPrefix, BinaryDataType },
 };
 
-boilerplate!(OperationHash = 32);
-impl_crypto_display!(OperationHash);
-impl_serde_crypto!(OperationHash);
-
-impl OperationHash {
-    /// Preimage of ciphertext prefix `o`
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 2] = [5, 116];
-}
-
-impl StaticPrefix for OperationHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl Crypto for OperationHash {}
-
-boilerplate!(ChainId = 4);
-impl_crypto_display!(ChainId);
-impl_serde_crypto!(ChainId);
-
-impl ChainId {
-    /// Preimage of ciphertext prefix `net`
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 3] = [87, 82, 0];
-}
-
-impl StaticPrefix for ChainId {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl Crypto for ChainId {}
-
-boilerplate!(BlockHash = 32);
-impl_crypto_display!(BlockHash);
-impl_serde_crypto!(BlockHash);
-
-impl BlockHash {
-    /// Preimage of ciphertext prefix `B`
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 2] = [1, 52];
-}
-
-impl StaticPrefix for BlockHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl Crypto for BlockHash {}
+pub mod etc;
+pub use etc::*;
 
 boilerplate!(@attr derive(PartialOrd,Ord) for ContractHash = 20);
 
@@ -240,8 +192,59 @@ pub enum ContractId<Pkh> {
     Originated(ContractHash),
 }
 
+impl<Pkh> ContractId<Pkh> {
+    /// Returns the raw `[u8; 20]` payload of a [`ContractId<Pkh>`], ignoring any
+    /// distinctions between implicit/originated accounts, and the cryptographic
+    /// algorithm associated with the `Pkh` type (if applicable).
+    pub fn as_array_ref(&self) -> &[u8; 20] where Pkh: AsRef<[u8; 20]> {
+        match self {
+            ContractId::Implicit(pkh) => pkh.as_ref(),
+            ContractId::Originated(ch) => ch.as_array_ref(),
+        }
+    }
+
+    pub fn as_fixed_bytes(&self) -> &FixedBytes<20> where Pkh: AsRef<FixedBytes<20>> {
+        match self {
+            ContractId::Implicit(pkh) => pkh.as_ref(),
+            ContractId::Originated(ch) => ch.as_fixed_bytes(),
+        }
+    }
+}
+
+mod contract_id_impls {
+    use super::{ *, sealed::PKHType };
+    use crate::traits::{ AsPayload };
+
+    impl<Pkh: PKHType> AsPayload for ContractId<Pkh> {
+        fn as_payload(&self) -> &[u8] {
+            self.as_array_ref()
+        }
+    }
+
+    impl<Pkh: PKHType> AsRef<[u8; 20]> for ContractId<Pkh> {
+        fn as_ref(&self) -> &[u8; 20] {
+            self.as_array_ref()
+        }
+    }
+
+    impl<Pkh: PKHType> AsRef<[u8]> for ContractId<Pkh> {
+        fn as_ref(&self) -> &[u8] {
+            self.as_array_ref()
+        }
+    }
+
+    impl<Pkh: PKHType> AsRef<FixedBytes<20>> for ContractId<Pkh> {
+        fn as_ref(&self) -> &FixedBytes<20> {
+            self.as_fixed_bytes()
+        }
+    }
+}
+
 mod sealed {
-    pub trait PKHType: crate::traits::Crypto {}
+    pub trait PKHType: crate::traits::Crypto +
+        AsRef<[u8; 20]> +
+        AsRef<tedium::FixedBytes<20>> +
+        crate::traits::CryptoExt<Error = super::CryptoDecodeError> {}
 
     impl PKHType for super::PublicKeyHashV0 {}
     impl PKHType for super::PublicKeyHashV1 {}
@@ -277,34 +280,17 @@ impl<Pkh: Crypto> ContractId<Pkh> {
     }
 
     pub fn as_implicit(&self) -> Option<&Pkh> {
-        if let Self::Implicit(v) = self {
-            Some(v)
-        } else {
-            None
-        }
+        if let Self::Implicit(v) = self { Some(v) } else { None }
     }
 
     pub fn as_originated(&self) -> Option<&ContractHash> {
-        if let Self::Originated(v) = self {
-            Some(v)
-        } else {
-            None
-        }
+        if let Self::Originated(v) = self { Some(v) } else { None }
     }
 }
 
-impl<Pkh: Crypto> std::fmt::Display for ContractId<Pkh> {
+impl<Pkh: sealed::PKHType> std::fmt::Display for ContractId<Pkh> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         <Self as Crypto>::base58check_fmt(&self, f)
-    }
-}
-
-impl<Pkh: AsPayload> AsPayload for ContractId<Pkh> {
-    fn as_payload(&self) -> &[u8] {
-        match self {
-            ContractId::Implicit(pkh) => pkh.as_payload(),
-            ContractId::Originated(ch) => ch.as_payload(),
-        }
     }
 }
 
@@ -317,9 +303,9 @@ impl<Pkh: DynamicPrefix> DynamicPrefix for ContractId<Pkh> {
     }
 }
 
-impl<Pkh: Crypto> Crypto for ContractId<Pkh> {}
+impl<Pkh: sealed::PKHType> Crypto for ContractId<Pkh> {}
 
-impl<Pkh: CryptoExt<Error = CryptoDecodeError>> CryptoExt for ContractId<Pkh> {
+impl<Pkh: sealed::PKHType> CryptoExt for ContractId<Pkh> {
     type Error = CryptoDecodeError;
 
     fn reconstruct(preimage: Vec<u8>) -> Result<Self, Self::Error> {
@@ -331,79 +317,7 @@ impl<Pkh: CryptoExt<Error = CryptoDecodeError>> CryptoExt for ContractId<Pkh> {
     }
 }
 
-boilerplate!(ContextHash = 32);
-impl_crypto_display!(ContextHash);
-impl ContextHash {
-    /// Preimage of ciphertext prefix `Co`.
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 2] = [79, 199];
-}
-impl StaticPrefix for ContextHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-impl Crypto for ContextHash {}
 
-boilerplate!(OperationListListHash = 32);
-impl_crypto_display!(OperationListListHash);
-impl_serde_crypto!(OperationListListHash);
-
-impl OperationListListHash {
-    /// Preimage of ciphertext prefix `LLo`
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 3] = [29, 159, 109];
-}
-
-impl StaticPrefix for OperationListListHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl Crypto for OperationListListHash {}
-
-boilerplate!(ProtocolHash = 32);
-impl_crypto_display!(ProtocolHash);
-impl_serde_crypto!(ProtocolHash);
-
-impl ProtocolHash {
-    /// Preimage of ciphertext prefix `P`.
-    ///
-    /// TODO: implement mutation tests to verify the correct ciphertext prefix
-    pub const BASE58_PREFIX: [u8; 2] = [2, 170];
-}
-
-impl StaticPrefix for ProtocolHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl Crypto for ProtocolHash {}
-
-boilerplate!(ValueHash = 32);
-impl_crypto_display!(ValueHash);
-
-impl ValueHash {
-    /// Preimage bytes for ciphertext prefix `vh`.
-    pub const BASE58_PREFIX: [u8; 3] = [1, 106, 242];
-}
-
-impl crate::traits::StaticPrefix for ValueHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-
-impl crate::traits::Crypto for ValueHash {}
-
-crate::boilerplate!(NonceHash = 32);
-crate::impl_crypto_display!(NonceHash);
-
-impl NonceHash {
-    /// Preimage bytes for ciphertext prefix `nce`.
-    pub const BASE58_PREFIX: [u8; 3] = [69, 220, 169];
-}
-
-impl StaticPrefix for NonceHash {
-    const PREFIX: &'static [u8] = &Self::BASE58_PREFIX;
-}
-impl Crypto for NonceHash {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SignatureV1 {
@@ -462,15 +376,17 @@ mod sigv1_impls {
         fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
             match value.len() {
                 96 => unsafe {
-                    let bytes: FixedBytes<96> =
-                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<96> = FixedBytes::try_from_slice(
+                        value.as_ref()
+                    ).unwrap_unchecked();
                     Ok(Self::Bls(bytes))
-                },
+                }
                 64 => unsafe {
-                    let bytes: FixedBytes<64> =
-                        FixedBytes::try_from_slice(value.as_ref()).unwrap_unchecked();
+                    let bytes: FixedBytes<64> = FixedBytes::try_from_slice(
+                        value.as_ref()
+                    ).unwrap_unchecked();
                     Ok(Self::SigV0(bytes))
-                },
+                }
                 other => Err(InvalidSignatureV1ByteLengthError(other)),
             }
         }
@@ -597,7 +513,7 @@ pub enum PublicKeyHashV0 {
 pub mod pkh_macros {
     #[macro_export]
     macro_rules! pkh {
-        (tz1 : $x:expr) => {
+        (tz1: $x:expr) => {
             tz1!($x)
         };
         (tz2: $x:expr) => {
@@ -610,32 +526,32 @@ pub mod pkh_macros {
 
     #[macro_export]
     macro_rules! tz1 {
-        (@v0 $x:expr ) => {
+        (@ v0 $x:expr) => {
             $crate::core::PublicKeyHashV0::Ed25519($crate::FixedBytes::from($x))
         };
-        ( $x:expr ) => {
+        ($x:expr) => {
             $crate::core::PublicKeyHashV1::upcast(tz1!(@v0 $x))
-        }
+        };
     }
 
     #[macro_export]
     macro_rules! tz2 {
-        (@v0 $x:expr ) => {
+        (@ v0 $x:expr) => {
             $crate::core::PublicKeyHashV0::Secp256k1($crate::FixedBytes::from($x))
         };
-        ( $x:expr ) => {
+        ($x:expr) => {
             $crate::core::PublicKeyHashV1::upcast(tz2!(@v0 $x))
-        }
+        };
     }
 
     #[macro_export]
     macro_rules! tz3 {
-        (@v0 $x:expr ) => {
+        (@ v0 $x:expr) => {
             $crate::core::PublicKeyHashV0::P256($crate::FixedBytes::from($x))
         };
-        ( $x:expr ) => {
+        ($x:expr) => {
             $crate::core::PublicKeyHashV1::upcast(tz3!(@v0 $x))
-        }
+        };
     }
 }
 
@@ -689,10 +605,7 @@ impl std::hash::Hash for PublicKeyHashV0 {
 }
 
 impl tedium::Decode for PublicKeyHashV0 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-    where
-        Self: Sized,
-    {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
         let tag = p.take_tagword::<PublicKeyHashV0, u8, _>(&[0, 1, 2])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -710,10 +623,7 @@ impl PublicKeyHashV0 {
 }
 
 impl serde::Serialize for PublicKeyHashV0 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -722,7 +632,7 @@ impl serde::Serialize for PublicKeyHashV0 {
                 "PublicKeyHashV0",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload(),
+                self.as_payload()
             )
         }
     }
@@ -783,7 +693,9 @@ impl DynamicPrefix for PublicKeyHashV0 {
 #[derive(Debug)]
 pub enum CryptoDecodeError {
     FromSlice(std::array::TryFromSliceError),
-    UnexpectedPrefix { prefix_bytes: Vec<u8> },
+    UnexpectedPrefix {
+        prefix_bytes: Vec<u8>,
+    },
 }
 
 impl std::fmt::Display for CryptoDecodeError {
@@ -823,9 +735,10 @@ impl CryptoExt for PublicKeyHashV0 {
             _ if pref == Self::ED25519_BASE58_PREFIX => Ok(Self::Ed25519(bytes.try_into()?)),
             _ if pref == Self::SECP256K1_BASE58_PREFIX => Ok(Self::Secp256k1(bytes.try_into()?)),
             _ if pref == Self::P256_BASE58_PREFIX => Ok(Self::P256(bytes.try_into()?)),
-            _ => Err(CryptoDecodeError::UnexpectedPrefix {
-                prefix_bytes: pref.to_vec(),
-            }),
+            _ =>
+                Err(CryptoDecodeError::UnexpectedPrefix {
+                    prefix_bytes: pref.to_vec(),
+                }),
         }
     }
 }
@@ -847,10 +760,7 @@ pub struct UnsupportedAlgorithmError(());
 
 impl std::fmt::Display for UnsupportedAlgorithmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "cannot downcast: cryptographic algorithm unsupported in target type"
-        )
+        write!(f, "cannot downcast: cryptographic algorithm unsupported in target type")
     }
 }
 
@@ -942,10 +852,7 @@ impl std::hash::Hash for PublicKeyHashV1 {
 }
 
 impl tedium::Decode for PublicKeyHashV1 {
-    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-    where
-        Self: Sized,
-    {
+    fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
         let tag = p.take_tagword::<PublicKeyHashV1, u8, _>(&[0, 1, 2, 3])?;
         let payload = FixedBytes::<20>::parse(p)?;
         Ok(unsafe { Self::from_parts_unchecked(tag, payload) })
@@ -962,10 +869,7 @@ impl PublicKeyHashV1 {
 }
 
 impl serde::Serialize for PublicKeyHashV1 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         if serializer.is_human_readable() {
             let tmp: String = self.to_base58check();
             serializer.serialize_str(tmp.as_str())
@@ -974,7 +878,7 @@ impl serde::Serialize for PublicKeyHashV1 {
                 "PublicKeyHashV1",
                 self.virtual_discriminant() as u32,
                 self.variant_name(),
-                self.as_payload(),
+                self.as_payload()
             )
         }
     }
@@ -1037,11 +941,7 @@ pub struct AnachronisticTimestampError(i64);
 
 impl std::fmt::Display for AnachronisticTimestampError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "epoch offset `{}` outside of conceivable time-range",
-            self.0
-        )
+        write!(f, "epoch offset `{}` outside of conceivable time-range", self.0)
     }
 }
 
@@ -1065,19 +965,13 @@ impl TryFrom<Timestamp> for DateTime<Utc> {
 }
 
 impl<'de> serde::Deserialize<'de> for Timestamp {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
         Ok(Self(i64::deserialize(deserializer)?))
     }
 }
 
 impl serde::Serialize for Timestamp {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         if let Ok(utc) = <Timestamp as TryInto<DateTime<Utc>>>::try_into(*self) {
             utc.serialize(serializer)
         } else {
@@ -1161,7 +1055,7 @@ mod timestamp_tests {
 pub mod mutez {
     use std::fmt::Display;
 
-    use num::{Integer, ToPrimitive};
+    use num::{ Integer, ToPrimitive };
     use num_bigint::BigUint;
     use tedium::Decode;
 
@@ -1206,10 +1100,7 @@ pub mod mutez {
         /// This function is provided as a convenience for end-users who want more control over
         /// the display format of [`Mutez`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
         /// traits implementations, or the [`to_xtz_string`] associated method.
-        pub fn format_parts<F>(&self, f: F) -> String
-        where
-            F: FnOnce(i64, u64) -> String,
-        {
+        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(i64, u64) -> String {
             let (radix, mantissa) = self.to_parts();
             f(radix, mantissa)
         }
@@ -1255,10 +1146,7 @@ pub mod mutez {
     }
 
     impl Decode for Mutez {
-        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self>
-        where
-            Self: Sized,
-        {
+        fn parse<P: tedium::Parser>(p: &mut P) -> tedium::ParseResult<Self> where Self: Sized {
             Ok(i64::parse(p)?.into())
         }
     }
@@ -1316,10 +1204,7 @@ pub mod mutez {
     }
 
     impl serde::Serialize for MutezPlus {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
             let tmp = format!("{self}");
             serializer.serialize_str(&tmp)
         }
@@ -1369,10 +1254,7 @@ pub mod mutez {
         /// This function is provided as a convenience for end-users who want more control over
         /// the display format of [`MutezPlus`] values than provided by the [`std::fmt::Debug`] and [`std::fmt::Display`]
         /// traits implementations, or the [`to_xtz_string`] associated method.
-        pub fn format_parts<F>(&self, f: F) -> String
-        where
-            F: FnOnce(BigUint, u64) -> String,
-        {
+        pub fn format_parts<F>(&self, f: F) -> String where F: FnOnce(BigUint, u64) -> String {
             let (radix, mantissa) = self.to_parts();
             f(radix, mantissa)
         }
@@ -1453,7 +1335,7 @@ pub mod mutez {
     }
 }
 
-pub use mutez::{Mutez, MutezPlus};
+pub use mutez::{ Mutez, MutezPlus };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd, Hash)]
 /// Representation of a rational number as a numerator-denominator pair, both of which
@@ -1514,10 +1396,7 @@ pub struct InvalidDiscriminantError<T> {
 }
 
 impl<T> InvalidDiscriminantError<T> {
-    pub(self) fn from_raw(raw: u8) -> Self
-    where
-        T: std::any::Any,
-    {
+    pub(self) fn from_raw(raw: u8) -> Self where T: std::any::Any {
         Self {
             raw,
             _proxy: std::marker::PhantomData::<T>,
@@ -1527,9 +1406,7 @@ impl<T> InvalidDiscriminantError<T> {
 
 impl<T: std::any::Any> std::fmt::Debug for InvalidDiscriminantError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InvalidDiscriminantError")
-            .field("raw", &self.raw)
-            .finish()
+        f.debug_struct("InvalidDiscriminantError").field("raw", &self.raw).finish()
     }
 }
 
@@ -1558,16 +1435,13 @@ impl VotingPeriodKind {
     ///
     /// Will panic if `raw` is invalid as a discriminant of this type (i.e. `raw > 4`).
     pub fn from_u8(raw: u8) -> Self {
-        assert!(
-            raw < 5,
-            "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]"
-        );
+        assert!(raw < 5, "Invalid raw u8 value for VotingPeriodKind: {raw} not in range [0..=4]");
         unsafe { Self::from_u8_unchecked(raw) }
     }
 
     pub fn try_from_u8(raw: u8) -> Result<Self, InvalidDiscriminantError<Self>> {
         match raw {
-            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) },
+            0..=4 => unsafe { Ok(Self::from_u8_unchecked(raw)) }
             _ => Err(InvalidDiscriminantError::<Self>::from_raw(raw)),
         }
     }
